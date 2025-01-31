@@ -10,7 +10,13 @@
     #define CPU_MAP_MEGA2560
 
     #ifdef CPU_MAP_MEGA2560
-    
+
+        // immediate WGC_BB1HW plan is:
+        // PIN_LED4 -> PIN_SHDNL_MAX17841
+        // PIN_TEMP_BAY1 -> PIN_LED4
+        // PIN_TEMP_BAY1,2,3 go away (pins freed), to (hopefully) be replaced by
+        // MAX17/Samsung SDI module internal thermistors...
+        // BB2 (or sooner): swap PIN_LED4 and PIN_SHDNL_MAX17841
         #define PIN_BATTCURRENT A0
         #define PIN_USER_SW     A1
         #define PIN_VPIN_IN     A2
@@ -20,9 +26,15 @@
         #define PIN_TEMP_BLU    A6
         #define PIN_FANOEM_LOW  A7
         #define PIN_FANOEM_HI   A8
-        #define PIN_TEMP_BAY1   A9
-        #define PIN_TEMP_BAY2  A10
-        #define PIN_TEMP_BAY3  A11
+        #ifdef WGC_BB1HW
+          #define PIN_LED4        A9
+          #define PIN_HMI_EN     A10
+          #define PIN_TURNOFFLiBCM  A11
+        #else
+          #define PIN_TEMP_BAY1   A9
+          #define PIN_TEMP_BAY2  A10
+          #define PIN_TEMP_BAY3  A11
+        #endif
         #define PIN_LED1       A12
         #define PIN_LED2       A13
         #define PIN_GPIO1      A14 //with daughterboard: heater (if installed) //without daughterboard: not used
@@ -32,7 +44,11 @@
         #define PIN_USB_TX          1
         #define PIN_METSCI_DE       2
         #define PIN_METSCI_REn      3
-        #define PIN_TURNOFFLiBCM    4
+        #ifdef WGC_BB1HW
+          #define PIN_LASIG         4
+        #else
+          #define PIN_TURNOFFLiBCM  4
+        #endif
         #define PIN_VPIN_OUT_PWM    5
         #define PIN_SENSOR_EN       6
         #define PIN_MCME_PWM        7
@@ -40,7 +56,11 @@
         #define PIN_GRID_SENSE      9
         #define PIN_GRID_EN        10
         #define PIN_FAN_PWM        11
-        #define PIN_HMI_EN         12
+        #ifdef WGC_BB1HW
+          #define PIN_LATRIG       12
+        #else
+          #define PIN_HMI_EN       12
+        #endif
         #define PIN_IGNITION_SENSE 13
         #define PIN_HW_VER1        38
         #define PIN_HW_VER0        39
@@ -48,11 +68,15 @@
         #define PIN_BATTSCI_DE     41
         #define PIN_COVER_SWITCH   42
         #define PIN_GPIO0_CS_MIMA  43
-        #define PIN_GPIO3          44 //with daughterboard: 1500W charger current (if installed) //without daughterboard: heater (if installed) 
+        #define PIN_GPIO3          44 //with daughterboard: 1500W charger current (if installed) //without daughterboard: heater (if installed)
         #define PIN_BUZZER_PWM     45
         #define PIN_LED3           46
         #define PIN_SPI_EXT_CS     47
-        #define PIN_LED4           48
+        #ifdef WGC_BB1HW
+          #define PIN_SHDNL_MAX17841 48     //Shut down pin for MAX17841
+        #else
+          #define PIN_LED4           48
+        #endif
         #define PIN_TEMP_EN        49
 
         #define PIN_SPI_CS SS

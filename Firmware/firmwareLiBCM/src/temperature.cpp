@@ -50,9 +50,16 @@ void temperature_measureBattery(void)
 {
     int8_t batteryTemps[NUM_BATTERY_TEMP_SENSORS + 1] = {0}; //1-indexed ([1] = bay1 temp)
 
+    #ifdef BMS_TYPE_LiBCM
     batteryTemps[1] = temperature_measureOneSensor_degC(PIN_TEMP_BAY1);
     batteryTemps[2] = temperature_measureOneSensor_degC(PIN_TEMP_BAY2);
     batteryTemps[3] = temperature_measureOneSensor_degC(PIN_TEMP_BAY3);
+    #elif defined BMS_TYPE_WGCLiBCM
+    #ifndef WGC_BB1HW
+    #error (Samsung SDI Battery module temp sensing not implimented yet)
+    //WGCToDo: CRITICAL Add SPI module temp sensing
+    #endif
+    #endif
 
     //stores hottest and coldest temp sensor value
     int8_t tempHi = TEMPERATURE_SENSOR_FAULT_LO; //highest measured temp is initially set to the  lowest possible temp
@@ -85,7 +92,7 @@ void temperature_measureBattery(void)
     if (tempLo > ROOM_TEMP_DEGC) { tempLoDelta = tempLo - ROOM_TEMP_DEGC; }
     else                         { tempLoDelta = ROOM_TEMP_DEGC - tempLo; }
 
-    //figure out which magnitude is further from ROOM_TEMP_DEGC 
+    //figure out which magnitude is further from ROOM_TEMP_DEGC
     if (tempHiDelta > tempLoDelta) { tempBattery = tempHi; }
     else                           { tempBattery = tempLo; }
 }
@@ -113,7 +120,7 @@ void temperature_printAll_latest(void)
 void temperature_measureAndPrintAll(void)
 {
     if (gpio_getPinState(PIN_TEMP_EN) == PIN_OUTPUT_HIGH)
-    {       
+    {
         Serial.print(F("\nTemperatures(C):"));
         Serial.print(F("\nBLU: "));
         Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_BLU));
@@ -123,12 +130,14 @@ void temperature_measureAndPrintAll(void)
         Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_WHT));
         Serial.print(F("\nYEL: "));
         Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_YEL));
+        #ifdef BMS_TYPE_LiBCM
         Serial.print(F("\nBAY1: "));
         Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_BAY1));
         Serial.print(F("\nBAY2: "));
         Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_BAY2));
         Serial.print(F("\nBAY3: "));
-        Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_BAY3)); 
+        Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_BAY3));
+        #endif
     }
     else
     {
@@ -207,18 +216,18 @@ void temperature_handler(void)
     uint8_t keyState_Now = key_getSampledState(); //prevent mid-loop key state change
 
     keyState_Now = turnSensorsOff_whenKeyStateChanges(keyState_Now); //JTS2doNow: function returns value meant for tempSensorState //writing to wrong variable?
-    
+
     static uint32_t latestTempMeasurement_ms = 0;
     static uint32_t latestSensorTurnon_ms = 0;
 
     if (tempSensorState == TEMPSENSORSTATE_TURNON)
     {
-        gpio_turnTemperatureSensors_on(); 
+        gpio_turnTemperatureSensors_on();
         latestSensorTurnon_ms = millis();
         tempSensorState = TEMPSENSORSTATE_POWERUP;
     }
 
-    else if (tempSensorState == TEMPSENSORSTATE_POWERUP)       
+    else if (tempSensorState == TEMPSENSORSTATE_POWERUP)
     {
         uint32_t timeSinceSensorTurnedOn = (millis() - latestSensorTurnon_ms);
 
@@ -234,14 +243,14 @@ void temperature_handler(void)
 
         if ((keyState_Now == KEYSTATE_ON) || (gpio_isGridChargerPluggedInNow() == YES)) { tempSensorState = TEMPSENSORSTATE_STAYON;  }
         else                                                                            { tempSensorState = TEMPSENSORSTATE_TURNOFF; }
-    }   
+    }
 
     else if (tempSensorState == TEMPSENSORSTATE_TURNOFF)
     {
         //sensors only turn off when key is off and grid charger is unplugged
         Serial.print(F("\nTemp(C): ")); //print temp when key is off
         Serial.print(String(tempBattery));
-        gpio_turnTemperatureSensors_off(); 
+        gpio_turnTemperatureSensors_off();
         tempSensorState = TEMPSENSORSTATE_OFF;
     }
 
@@ -262,14 +271,14 @@ void temperature_handler(void)
 
 //JTS2doLater: Need to differentiate between TEMPERATURE_SENSOR_FAULT_LO and actually being below -30 degC
 int8_t temperature_measureOneSensor_degC(uint8_t thermistorPin)
-{           
+{
     uint16_t countsADC = analogRead(thermistorPin); //measure ADC counts
 
     //This commented out section is quite math intensive:
     // -QTY3 floating point divisions
     // -QTY1 natural log (+5kB to load library)
     // -QTY3 multiplies
-    // -QTY3 add/subtract 
+    // -QTY3 add/subtract
         // #define TEMP_BALANCE_RESISTANCE_OHMS 10000
         // if (countsADC > 887) { countsADC = 887; } //prevent overflowing uint16_t in the next equation
 
@@ -282,7 +291,7 @@ int8_t temperature_measureOneSensor_degC(uint8_t thermistorPin)
         // #define ADC_COUNTS_AT_VCC 1023
         // // resistanceThermistor_ohms = ( countsADC * TEMP_BALANCE_RESISTANCE_OHMS) / (counts_VCC - countsADC )
         // uint16_t resistanceThermistor_ohms = ( countsADC * TEMP_BALANCE_RESISTANCE_OHMS) / (ADC_COUNTS_AT_VCC - countsADC); //if countsADC exceeds 887 this will overflow
-        
+
         // //Steinhart-Hart Beta Equation:
         // #define THERMISTOR_BETA 3982 //from datasheet
         // #define THERMISTOR_RESISTANCE_23DEGC 10000 // half ADC range since both resistors are 10kOhm at room temperature
@@ -417,7 +426,7 @@ int8_t temperature_measureOneSensor_degC(uint8_t thermistorPin)
     //correct for OEM temperature sensor's (unknown) k-coefficients
     //empirical data: ~/GitHub/Honda_Insight_LiBCM/Firmware/MVP/Calculations/OEM thermistor scaling.ods
     if ( ((tempMeasured_celsius > TEMPERATURE_SENSOR_FAULT_LO ) && (tempMeasured_celsius < TEMPERATURE_SENSOR_FAULT_HI )) &&
-         ((thermistorPin == PIN_TEMP_GRN) || (thermistorPin == PIN_TEMP_BLU) || (thermistorPin == PIN_TEMP_YEL) || (thermistorPin == PIN_TEMP_WHT)) ) 
+         ((thermistorPin == PIN_TEMP_GRN) || (thermistorPin == PIN_TEMP_BLU) || (thermistorPin == PIN_TEMP_YEL) || (thermistorPin == PIN_TEMP_WHT)) )
     {
         tempMeasured_celsius = ((tempMeasured_celsius * 5) >> 2) - 5; //actual: countsADC = countsADC * 1.225 - 4;
     }

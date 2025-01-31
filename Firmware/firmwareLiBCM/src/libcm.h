@@ -34,7 +34,20 @@
     #include "lcdState.h"
     #include "lcdTransmit.h"
     #include "gridCharger.h"
-    #include "LTC68042configure.h"
+    #ifdef BMS_TYPE_LiBCM
+        //WGCToDo: CRITICAL had to delete LTC68042configure.* for now.
+        // Need to figure out best way to tell arduino-builder to not link
+        // LTC68042xxx.o
+        #include "LTC68042configure.h"
+    #elif defined BMS_TYPE_WGCLiBCM
+        #include "BitFieldMacros.h"
+        #include "MAX17841.h"
+        #include "MAX17843.h"
+        #include "MAX1784Xcomms.h"
+        #include "MAX17configure.h"
+    #else
+        #error (Select BMS board type - LiBCM or WGCLiBCM - in config.h)
+    #endif
     #include "LTC68042cell.h"
     #include "LTC68042gpio.h"
     #include "LTC68042result.h"

@@ -8,7 +8,7 @@
 //////////////////////////////////////////////////////////////////
 
 void serialUSB_waitForEmptyBuffer(void)
-{   
+{
     //send all buffered serial data before starting each test (in case of brownout/reset)
     while (Serial.availableForWrite() != 63) { ; } //do nothing
 }
@@ -42,7 +42,7 @@ void bringupTester_gridcharger(void)
 {
     #ifdef RUN_BRINGUP_TESTER_GRIDCHARGER
         while (1) //this function never returns
-        {       
+        {
             Serial.print(F("\nRunning Grid Charger Test: "));
             #ifdef GRIDCHARGER_IS_1500W
                 Serial.print(F("GRIDCHARGER_IS_1500W"));
@@ -204,7 +204,7 @@ bool testLTC6804isoSPI(void)
     delay(50);
 
     Serial.print(F("\nLTC6804 - VREF test: "));
-    if (LTC6804gpio_areAllVoltageReferencesPassing() == true) { Serial.print(F("\nresult: passed")); } 
+    if (LTC6804gpio_areAllVoltageReferencesPassing() == true) { Serial.print(F("\nresult: passed")); }
     else                                                      { Serial.print(F("\nresult: FAIL!! !! !! !!")); didTestFail = true; }
 
     for (int ii=0; ii<5; ii++) { LTC68042cell_acquireAllCellVoltages(); delay(10); } //generate isoSPI traffic to check for errors
@@ -266,7 +266,7 @@ bool testDischargeFETs(void)
         {
             LTC68042configure_setBalanceResistors(FIRST_IC_ADDR + ii, cellDischargeBitmaps[bitmapPattern], LTC6804_DISCHARGE_TIMEOUT_02_SECONDS);
         }
-            
+
         delay(500); //wait for filter network to settle
 
         LTC68042cell_acquireAllCellVoltages();
@@ -276,7 +276,7 @@ bool testDischargeFETs(void)
     }
 
     return didTestFail;
-    
+
     //JTS2do: Automate test results.
     //right now you must paste the results into the following spreadsheet and verify everything is working properly:
     //~/Honda_Insight_LiBCM/Test Fixtures/LTC6804 Discharge Tester Analysis.ods
@@ -290,11 +290,11 @@ bool testLiDisplayLoopback(void)
 
     Serial.print(F("\nLiDisplay loopback test: "));
     serialUSB_waitForEmptyBuffer();
-        
+
     Serial1.begin(57600,SERIAL_8N1);
 
     while (Serial1.available() != 0) { Serial1.read(); } //empty buffer
-    
+
     for (char charToLoopback = 'A'; charToLoopback <= 'Z'; charToLoopback++)
     {
         Serial1.write(charToLoopback);
@@ -395,6 +395,7 @@ bool testTempSensors_unpowered(void)
         (tempBLU > 950)  ) { Serial.print(F("pass"));                              }
     else                   { Serial.print(F("FAIL!! !! !! !!")); didTestFail=true; }
 
+    #ifdef BMS_TYPE_LiBCM
     //lithium module sensors
     uint16_t tempBAY1 = adc_getTemperature(PIN_TEMP_BAY1);
     uint16_t tempBAY2 = adc_getTemperature(PIN_TEMP_BAY2);
@@ -408,6 +409,8 @@ bool testTempSensors_unpowered(void)
         (tempBAY2 > 950) &&
         (tempBAY3 > 950)  ) { Serial.print(F("pass"));                              }
     else                    { Serial.print(F("FAIL!! !! !! !!")); didTestFail=true; }
+    // BMS_TYPE_WGCLiBCM doesn't have TEMP_BAY1,2,3; uses Samsung SDI module internal temperature sensors
+    #endif
 
     return didTestFail;
 }
@@ -441,6 +444,7 @@ bool testTempSensors_powered(void)
         (tempBLU > 462) && (tempBLU < 565)  ) { Serial.print(F("pass")); }
     else                                      { Serial.print(F("FAIL!! !! !! !!")); didTestFail=true; }
 
+    #ifdef BMS_TYPE_LiBCM
     //LiBCM ring terminal sensors
     uint16_t tempBAY1 = adc_getTemperature(PIN_TEMP_BAY1);
     uint16_t tempBAY2 = adc_getTemperature(PIN_TEMP_BAY2);
@@ -454,6 +458,8 @@ bool testTempSensors_powered(void)
         (tempBAY2 > 459) && (tempBAY2 < 572) &&
         (tempBAY3 > 459) && (tempBAY3 < 572)  ) { Serial.print(F("pass")); }
     else                                        { Serial.print(F("FAIL!! !! !! !!")); didTestFail=true; }
+    // BMS_TYPE_WGCLiBCM doesn't have TEMP_BAY1,2,3; uses Samsung SDI module internal temperature sensors
+    #endif
 
     gpio_turnTemperatureSensors_off();
 
