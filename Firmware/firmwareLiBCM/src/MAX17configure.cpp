@@ -124,6 +124,7 @@ void LTC68042configure_programVolatileDefaults(void)
   }
   // Get MSB of ID and ROM CRC from ID2
   MAX1784Xcomms_readAll843Reg(M873_ID2, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
+  Serial.println();
   for (int DAx = 0; DAx < TOTAL_IC; DAx++) {
     moduleId[DAx] += ((uint32_t)BFN_GET(M873_ID2_bfDEVIDMsb, registerValue[DAx]) << 16);
     Serial.print(F("Device "));

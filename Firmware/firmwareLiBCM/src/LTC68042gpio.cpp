@@ -35,7 +35,7 @@ void LTC6804_adax()
     cmd[3] = (uint8_t)(temp_pec);
 
     //send broadcast adax command to LTC6804 pack
-//    LTC68042configure_spiWrite(4,cmd);
+//WGCToDo    LTC68042configure_spiWrite(4,cmd);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -59,7 +59,7 @@ void LTC6804_rdaux_reg(uint8_t reg, //GPIO voltage register to read back (1:A, 2
     cmd[2] = (uint8_t)(cmd_pec >> 8);
     cmd[3] = (uint8_t)(cmd_pec);
 
-//    LTC68042configure_spiWriteRead(cmd,4,data,8);
+//WGCToDo    LTC68042configure_spiWriteRead(cmd,4,data,8);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////

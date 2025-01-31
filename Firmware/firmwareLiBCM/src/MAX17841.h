@@ -127,15 +127,6 @@
   #define M871_RX_INTEN_RX_Full_INT_Enable                 2
   #define M871_RX_INTEN_RX_Stop_INT_Enable                 1
   #define M871_RX_INTEN_RX_Empty_INT_Enable                0
-  // WGCToDo: should this be in a config file?
-  // RX_INTERRUPT_ENABLE register bit value config defaults. "0b1" enables, "0b0" disables
-  #define M871_RX_INTEN_INIT_RX_ERROR_INT_ENABLE    0b1 // Interrupt enable for RX_Error_Status
-  #define M871_RX_INTEN_INIT_RX_BUSY_INT_ENABLE     0b0 // Interrupt enable for RX_Busy_Status
-  #define M871_RX_INTEN_INIT_RX_IDLE_INT_ENABLE     0b0 // Interrupt enable for RX_Idle_Status
-  #define M871_RX_INTEN_INIT_RX_OVERFLOW_INT_ENABLE 0b1 // Interrupt enable for RX_Overflow_Status
-  #define M871_RX_INTEN_INIT_RX_FULL_INT_ENABLE     0b0 // Interrupt enable for RX_Full_Status
-  #define M871_RX_INTEN_INIT_RX_STOP_INT_ENABLE     0b0 // Interrupt enable for RX_Stop_Status
-  #define M871_RX_INTEN_INIT_RX_EMPTY_INT_ENABLE    0b0 // Interrupt enable for RX_Empty_Status
 
   // TX_INTERRUPT_ENABLE register bits
   //#define M871_TX_INTEN_Reserved                           7 // Reserved
@@ -189,7 +180,6 @@
   #define M871_CONFIG_2_TX_No_Preamble                     0 // (in a mesage mode)
   // CONFIGURATION_2 register mode definitions
   //  Enable transmit preambles mode
-  // WGCToDo: both TX_PREAMBLE and TX_QUEUE set in M871_CONF_2_TX_PREAMBLE_MODE, for unknown reasons
   #define M871_CONF_2_TX_PREAMBLE_MODE     (BITVALUE(M871_CONFIG_2_TX_Preambles) | BITVALUE(M871_CONFIG_2_TX_Queue))
   // Enable transmit queue (messages) mode
   #define M871_CONF_2_TX_QUEUE_MODE        (BITVALUE(M871_CONFIG_2_TX_Queue))

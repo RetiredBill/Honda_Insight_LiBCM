@@ -16,7 +16,6 @@ void MAX1784Xcomms_setExpectedDataCheck(uint8_t expectedDC) {m873ExpectedDataChe
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo: 1/30 up to date
 // Check provided (actual) versus expected value. If not qual, print error message.
 //  return comparisson result 1 or 0
 bool MAX1784Xcomms_checkActualVsExpected(
@@ -41,7 +40,6 @@ bool MAX1784Xcomms_checkActualVsExpected(
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo: 1/30 up to date
 //Read and return MAX17841 ASCI chip Model and Version
 uint16_t MAX1784Xcomms_ReadModelAndVersion(void)
 {
@@ -60,7 +58,6 @@ uint16_t MAX1784Xcomms_ReadModelAndVersion(void)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo: 1/30 up to date
 //initialize the MAX17841 ASCI chip configuration
 //WGCToDo: Add the other MAX17841 registers, rather than depending on power-on values?
 void MAX1784Xcomms_max17841_Init(void)
@@ -141,7 +138,6 @@ void MAX1784Xcomms_max17841_shutdown(void)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo: 1/30 up to date
 // Wake up the UART slave devices and initialize BMS ICs in daisy chain.
 //   Leave the MAX17843 chips in active mode, ready for messages
 void MAX1784Xcomms_wakeup(void)
@@ -220,7 +216,6 @@ void MAX1784Xcomms_wakeup(void)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo: 1/30 up to date
 //  Message handling for the MAX17843 chips
 //    Private function
 bool MAX17843_message873Workhorse(
@@ -240,7 +235,6 @@ digitalWrite(PIN_LASIG, HIGH);
 
   // Transfter outgoing message to ASCI chip load queue
   LTC68042configure_spiWrite(tx_len, tx_Data);
-  // WGCToDo: Read back load queue to verify contents
 
   // ================= Do specified checks before starting a message
   if (messageControl & BITVALUE(MCONT_M871_FMEA)) {
@@ -540,7 +534,6 @@ digitalWrite(PIN_LASIG, HIGH);
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo: 1/30 up to date
 // Do alive-cound byte checking and seed increment
   // alive-count is garbage until ALIVECNTEN in DEVCFG1 is set.
   // Checking is therefor gated by m873AliveCountSeed: 0 => don't check alive-count yet, else do
@@ -562,7 +555,6 @@ bool MAX1784Xcomms_checkAliveCount(int aliveCount, int aliveCountIncrement, char
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo: 1/30 up to date
 // Send the HELLOALL command up the daisy chain to determine the number of devices
 int MAX1784Xcomms_helloall(void)
 {
@@ -598,7 +590,6 @@ int MAX1784Xcomms_helloall(void)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo: 1/30 WIP
 // Read a single register from all devices
 //   register given by regAddr
 //   register values left in resultBuff[]

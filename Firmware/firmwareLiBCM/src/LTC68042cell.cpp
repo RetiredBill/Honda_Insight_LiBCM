@@ -35,7 +35,7 @@ void startCellConversion(void)
     cmd[2] = (uint8_t)(temp_pec >> 8);
     cmd[3] = (uint8_t)(temp_pec);
 
-//    LTC68042configure_spiWrite(4,cmd); //send 'adcv' command to all LTC6804s (broadcast command)
+//WGCToDo    LTC68042configure_spiWrite(4,cmd); //send 'adcv' command to all LTC6804s (broadcast command)
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -60,7 +60,7 @@ void serialReadCVR( uint8_t chipAddress, char cellVoltageRegister, uint8_t *data
     cmd[2] = (uint8_t)(calculated_pec >> 8);
     cmd[3] = (uint8_t)(calculated_pec);
 
-//    LTC68042configure_spiWriteRead(cmd,4,&data[0],8);
+//WGCToDo    LTC68042configure_spiWriteRead(cmd,4,&data[0],8);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////

@@ -11,6 +11,7 @@
 
     #ifdef CPU_MAP_MEGA2560
 
+        //WGCToDo
         // immediate WGC_BB1HW plan is:
         // PIN_LED4 -> PIN_SHDNL_MAX17841
         // PIN_TEMP_BAY1 -> PIN_LED4
@@ -26,7 +27,7 @@
         #define PIN_TEMP_BLU    A6
         #define PIN_FANOEM_LOW  A7
         #define PIN_FANOEM_HI   A8
-        #ifdef WGC_BB1HW
+        #ifdef WGC_BB1HW //WGCToDo
           #define PIN_LED4        A9
           #define PIN_HMI_EN     A10
           #define PIN_TURNOFFLiBCM  A11
@@ -44,7 +45,7 @@
         #define PIN_USB_TX          1
         #define PIN_METSCI_DE       2
         #define PIN_METSCI_REn      3
-        #ifdef WGC_BB1HW
+        #ifdef WGC_BB1HW //WGCToDo
           #define PIN_LASIG         4
         #else
           #define PIN_TURNOFFLiBCM  4
@@ -56,7 +57,7 @@
         #define PIN_GRID_SENSE      9
         #define PIN_GRID_EN        10
         #define PIN_FAN_PWM        11
-        #ifdef WGC_BB1HW
+        #ifdef WGC_BB1HW //WGCToDo
           #define PIN_LATRIG       12
         #else
           #define PIN_HMI_EN       12
@@ -72,7 +73,7 @@
         #define PIN_BUZZER_PWM     45
         #define PIN_LED3           46
         #define PIN_SPI_EXT_CS     47
-        #ifdef WGC_BB1HW
+        #ifdef WGC_BB1HW //WGCToDo
           #define PIN_SHDNL_MAX17841 48     //Shut down pin for MAX17841
         #else
           #define PIN_LED4           48
