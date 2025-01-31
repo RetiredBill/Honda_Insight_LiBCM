@@ -17,6 +17,7 @@ uint16_t cellVoltages_counts[TOTAL_IC][CELLS_PER_IC];
 /////////////////////////////////////////////////////////////////////////////////////////
 
 //tell all LTC68042 ICs to measure all cells
+//  (private method)
 void startCellConversion(void)
 {
     uint8_t cmd[4];
@@ -35,13 +36,33 @@ void startCellConversion(void)
     cmd[2] = (uint8_t)(temp_pec >> 8);
     cmd[3] = (uint8_t)(temp_pec);
 
-//WGCToDo    LTC68042configure_spiWrite(4,cmd); //send 'adcv' command to all LTC6804s (broadcast command)
+    LTC68042configure_spiWrite(4,cmd); //send 'adcv' command to all LTC6804s (broadcast command)
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+
+//tell all MAX17843 ICs to measure all cells
+//  (private method)
+void startMAX17843CellConversion(void)
+{
+digitalWrite(PIN_LATRIG, HIGH); //WGCToDo: temporary debugging statement
+digitalWrite(PIN_LASIG, HIGH);//WGCToDo: temporary debugging statement
+digitalWrite(PIN_LASIG, LOW); // #0 WGCToDo: temporary debugging statement
+digitalWrite(PIN_LASIG, HIGH);//WGCToDo: temporary debugging statement
+    // Write M873_SCANCTRL to all devices to start a scan
+    MAX1784Xcomms_writeAll843Reg(
+      M873_SCANCTRL,
+      TOTAL_IC,
+      M873_SCANCTRL_INIT | BITVALUE(M873_SCANCTRL_SCAN),
+      MCONT_FEW_PRTX);
+digitalWrite(PIN_LASIG, LOW); // #6 WGCToDo: temporary debugging statement
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
 //Read a single 8 byte CVR and store the result in *data
 //This function is ONLY used by validateAndStoreNextCVR().
+//  (private method)
 void serialReadCVR( uint8_t chipAddress, char cellVoltageRegister, uint8_t *data ) //data: Unparsed cellVoltage_counts
 {
     uint8_t cmd[4];
@@ -60,13 +81,14 @@ void serialReadCVR( uint8_t chipAddress, char cellVoltageRegister, uint8_t *data
     cmd[2] = (uint8_t)(calculated_pec >> 8);
     cmd[3] = (uint8_t)(calculated_pec);
 
-//WGCToDo    LTC68042configure_spiWriteRead(cmd,4,&data[0],8);
+    LTC68042configure_spiWriteRead(cmd,4,&data[0],8);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
 //Validate specified LTC6804's specified CVR
 //store valid cell voltages in cellVoltages_counts[][]
+//  (private method)
 void validateAndStoreNextCVR(uint8_t chipAddress, char cellVoltageRegister)
 {
     const uint8_t NUM_BYTES_IN_REG  = 6; //QTY3 cells * 2B/cell
@@ -130,7 +152,54 @@ void validateAndStoreNextCVR(uint8_t chipAddress, char cellVoltageRegister)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
+//Validate specified MAX17843 cell readings
+//store valid cell voltages in cellVoltages_counts[][]
+//  (private method)
+void validateAndStoreNextMAX17843(uint8_t chipAddress)
+{
+    const uint8_t MAX_READ_ATTEMPTS = 3; //max attempts to read back CVR without PEC error
+
+    uint8_t attemptCounter = 0;
+    bool readOk = true;
+    uint16_t rawReadings[(2 + M873_TOTAL - M873_CELL1)];
+    // rawReadings[0:11]  12 cell voltages
+    // rawReadings[12]    Vblock
+    // rawReadings[13]    thermistor 1
+    // rawReadings[14]    thermistor 2
+    // rawReadings[15]    total voltage
+    // rawReadings[16]    die temp
+
+    do //repeats until PECs match (i.e. no data transmission errors)
+    {
+        readOk &= MAX1784Xcomms_readBlock843(M873_CELL1, (1 + M873_TOTAL - M873_CELL1), chipAddress, rawReadings, MCONT_RX_NO_CHECKS);
+        readOk &= MAX1784Xcomms_readDev843Reg(M873_DIAG, chipAddress, &(rawReadings[16]), MCONT_RX_NO_CHECKS);
+    } while ((!readOk) && (attemptCounter < MAX_READ_ATTEMPTS)); //retry if error
+
+    //store cell voltage results
+    if (attemptCounter >= MAX_READ_ATTEMPTS) {
+        //too many errors occurred
+        for (int cell = 0; cell < CELLS_PER_IC; cell++) {
+            cellVoltages_counts[chipAddress][cell] =  0;
+        }
+    }
+    else {
+        for (int cell = 0; cell < CELLS_PER_IC; cell++) {
+            //WGCToDo: Doing volage scaling here (floating point multiplication)
+            // It would lead to faster execution to convert the rest of
+            // LiBCM cellVoltages_counts scale...
+            // Scale factor 5v/2^^16counts = 76.3uV/bit -> 100 uV/bit
+            //   => rawReadings * 5v/(2^^16counts)[V/bit] * 10000[100uV/V] = rawReadings * 0.762939
+            // Note: this is just the scale factor. MAX17843 only has
+            //  from 12 to 14 bits of resolution. LSBs are always 0
+            cellVoltages_counts[chipAddress][cell] =  (uint16_t)((float)rawReadings[cell] * 0.762939);
+        }
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+
 //results stored in LTC68042results.c
+//  (private method)
 void processAllCellVoltages(void)
 {
     uint32_t packVoltage_RAW = 0; //Multiply by 0.0001 for volts
@@ -244,6 +313,7 @@ void processAllCellVoltages(void)
 //  -The seventeenth call performs all pack voltage math and stores valid results in LTC68042_result.c
 //
 //returns false while gathering data, true each time all data is processed
+//  (Public method)
 bool LTC68042cell_nextVoltages(void)
 {
     static uint8_t presentState = LTC_STATE_FIRSTRUN;
@@ -256,6 +326,7 @@ bool LTC68042cell_nextVoltages(void)
 
         //round-robin state handlers
         static uint8_t chipAddress = FIRST_IC_ADDR;
+      #ifdef BMS_TYPE_LiBCM
         static char cellVoltageRegister = 'A'; //LTC68042 contains QTY4 CVRs (A/B/C/D)
 
         validateAndStoreNextCVR(chipAddress, cellVoltageRegister);
@@ -276,6 +347,17 @@ bool LTC68042cell_nextVoltages(void)
                 presentState = LTC_STATE_PROCESS; //all cell voltages gathered.  Process data on next run.
             }
         }
+      #else
+        // for MAX17843 BMS, do 12 cells at a time
+        validateAndStoreNextMAX17843(chipAddress);
+        if (++chipAddress >= (TOTAL_IC)) {
+digitalWrite(PIN_LATRIG, LOW); //WGCToDo: temporary debugging statement
+            //just finished a battery module
+            startMAX17843CellConversion();
+            chipAddress = FIRST_IC_ADDR; //reset to first LTC IC
+            presentState = LTC_STATE_PROCESS; //all cell voltages gathered.  Process data on next run.
+        }
+      #endif
     }
 
     else if (presentState == LTC_STATE_PROCESS)
@@ -290,7 +372,11 @@ bool LTC68042cell_nextVoltages(void)
     {
         //LTC6804 ICs were previously off
         LTC68042configure_programVolatileDefaults();
+      #ifdef BMS_TYPE_LiBCM
         startCellConversion();
+      #else
+        startMAX17843CellConversion();
+      #endif
         presentState = LTC_STATE_GATHER;
     }
 
@@ -308,6 +394,7 @@ bool LTC68042cell_nextVoltages(void)
 //Only call when keyOFF //takes too long to execute when keyON (causes check engine light)
 //Results are stored in "LTC68042_results.c"
 //JTS2doNext: rewrite to remove double call hack
+//  (Public method)
 void LTC68042cell_acquireAllCellVoltages(void)
 {
     while (LTC68042cell_nextVoltages() != CELL_DATA_PROCESSED) { ; } //clear old data (if any)
@@ -317,6 +404,7 @@ void LTC68042cell_acquireAllCellVoltages(void)
 /////////////////////////////////////////////////////////////////////////////////////////
 
 //JTS2doLater: Write Test
+//  (Public method?)
 void LTC68042cell_openShortTest(void)
 {
     // 1a: Turn off all sense resistors
