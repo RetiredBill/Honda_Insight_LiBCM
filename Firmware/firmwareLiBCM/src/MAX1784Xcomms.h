@@ -90,7 +90,7 @@
   void MAX1784Xcomms_setup843Registers(int Device_count);
   void MAX1784Xcomms_max17841_shutdown(void);
   void MAX1784Xcomms_wakeup(void);
-  int  MAX1784Xcomms_helloall(void);
+  int  MAX1784Xcomms_enumerateDevices(void);
   uint8_t MAX1784Xcomms_getExpectedDataCheck(void);
   void MAX1784Xcomms_setExpectedDataCheck(uint8_t expectedDC);
   void MAX1784Xcomms_enableAliveCount(void);

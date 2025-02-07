@@ -555,8 +555,9 @@ bool MAX1784Xcomms_checkAliveCount(int aliveCount, int aliveCountIncrement, char
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-// Send the HELLOALL command up the daisy chain to determine the number of devices
-int MAX1784Xcomms_helloall(void)
+// Send the HELLOALL command up the daisy chain to assigh each device its owh
+//   unique address, and (incidentally) determine the number of devices
+int MAX1784Xcomms_enumerateDevices(void)
 {
   bool messageValid = 1; //WGCToDo: Since I'm returning devCount, there is no place to return this...
   uint8_t cmd[5];

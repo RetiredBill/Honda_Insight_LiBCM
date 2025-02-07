@@ -35,7 +35,6 @@
 
   // General configuration registers
   #define M873_DEVADDRESS                0x01
-  #define M873_ADR                       0x0C // aka AUTOBALSWDIS Delay Register
   #define M873_DEVCFG1                   0x10
   #define M873_DEVCFG2                   0x1B
   #define M873_GPIO                      0x11
@@ -52,6 +51,7 @@
 
   // Cell balancing configuration registers
   #define M873_TIMERCFG                  0x18 // aka WATCHDOG Register
+  #define M873_ADR                       0x0C // aka AUTOBALSWDIS Delay Register
   #define M873_BALSWEN                   0x1A
   #define M873_BALDIAGCFG                0x1C
   #define M873_BALSWDCHG                 0x1D
@@ -96,9 +96,9 @@
   #define M873_ADCTEST2B                 0x5A
 
   // Can be used for clearing flags...
-  #define M873_CLEAR_ALL                     0
+  #define M873_CLEAR_ALL                    0
 
-  // Register bit default values
+  // Register bit positions
 
   // STATUS register
   #define M873_STATUS_ALRTRST              15

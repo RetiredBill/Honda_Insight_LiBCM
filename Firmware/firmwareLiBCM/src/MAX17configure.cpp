@@ -18,11 +18,14 @@
 /////////////////////////////////////////////////////////////////////////////////////////
 
 //Stores configuration register data to write to IC
-//WGCToDo: not implimented yet: uint8_t configurationRegisterData[6]; //[CFGR0, CFGR1, CFGR2, CFGR3, CFGR4, CFGR5]
+#ifndef BMS_TYPE_WGCLiBCM
+  uint8_t configurationRegisterData[6]; //[CFGR0, CFGR1, CFGR2, CFGR3, CFGR4, CFGR5]
+#endif
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo MAX17843configure_writeConfigRegisters: needs major attention (but local to this file...)
+//WGCToDo MAX17843configure_writeConfigRegisters: 2/5 up to date (stubbed out)
+//WGCToDo: could resurect this if a need for shadow registers arrises...
 //Write LTC6804 configuration registers
 //if (icAddress == BROADCAST_TO_ALL_ICS), this function broadcasts the same data to all LTC6804 ICs
 //
@@ -32,13 +35,14 @@
 
 void MAX17843configure_writeConfigRegisters(uint8_t icAddress)
 {
+  #ifndef BMS_TYPE_WGCLiBCM
     const uint8_t BYTES_IN_REG = 6;
     const uint8_t CMD_LENGTH = 2+2+6+2; //("Write Configuration Registers" command) + (PEC) + ("configuration register" data) + (PEC)
     uint8_t cmd[CMD_LENGTH];
 
     //Load cmd array with WRCFG command and PEC
-//    if (icAddress == BROADCAST_TO_ALL_ICS) { cmd[0] = 0x00; } //0b00000xxx indicates this is a broadcast command
-//    else                                   { cmd[0] = 0x80 + (icAddress << 3); } //see datasheet Tables 33 & 34
+    if (icAddress == BROADCAST_TO_ALL_ICS) { cmd[0] = 0x00; } //0b00000xxx indicates this is a broadcast command
+    else                                   { cmd[0] = 0x80 + (icAddress << 3); } //see datasheet Tables 33 & 34
 
     cmd[1] = 0x01; //send "write configuration registers" command ('WRCFG')
 
@@ -50,14 +54,15 @@ void MAX17843configure_writeConfigRegisters(uint8_t icAddress)
     uint8_t cmd_index = 4; //stored byte index in the cmd array
 
     //add the "configuration register" bytes (CFGR0:5) to the cmd array
-    //for (uint8_t current_byte = 0; current_byte < BYTES_IN_REG; current_byte++) { cmd[cmd_index++] = configurationRegisterData[current_byte]; }
+    for (uint8_t current_byte = 0; current_byte < BYTES_IN_REG; current_byte++) { cmd[cmd_index++] = configurationRegisterData[current_byte]; }
 
     //Calculate the PEC for the LTC6804 configuration register bytes
-//    temp_pec = LTC68042configure_calcPEC15(BYTES_IN_REG, &configurationRegisterData[0]);// calculate the PEC
+    temp_pec = LTC68042configure_calcPEC15(BYTES_IN_REG, &configurationRegisterData[0]);// calculate the PEC
     cmd[cmd_index++] = (uint8_t)(temp_pec >> 8); //upper PEC byte
     cmd[cmd_index++] = (uint8_t)temp_pec; //lower PEC byte
 
-//    LTC68042configure_spiWrite(CMD_LENGTH, cmd);
+    LTC68042configure_spiWrite(CMD_LENGTH, cmd);
+  #endif
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -67,10 +72,10 @@ void MAX17843configure_writeConfigRegisters(uint8_t icAddress)
 //configure discharge resistor states on a single LTC6804 IC (CFGR4:5)
 void LTC68042configure_setBalanceResistors(uint8_t icAddress, uint16_t cellBitmap, uint8_t softwareTimeout)
 {
-    ////Each bit in cellBitmap corresponds to a specific cell's DCCn discharge bit
-    ////Example: cellBitmap = 0b0000 1000 0000 0011 enables discharge on cells 12, 2, and 1 //LSB is cell01
-    ////Example: cellBitmap = 0b0000 1111 1111 1111 enables discharge on all cells
-    ////See Table36
+    //Each bit in cellBitmap corresponds to a specific cell's DCCn discharge bit
+    //Example: cellBitmap = 0b0000 1000 0000 0011 enables discharge on cells 12, 2, and 1 //LSB is cell01
+    //Example: cellBitmap = 0b0000 1111 1111 1111 enables discharge on all cells
+    //See Table36
     //configurationRegisterData[4] = (uint8_t)(cellBitmap); //LSByte
     //configurationRegisterData[5] = ( ((uint8_t)(cellBitmap >> 8)) | softwareTimeout ); //MSByte's lower nibble
 
@@ -79,35 +84,24 @@ void LTC68042configure_setBalanceResistors(uint8_t icAddress, uint16_t cellBitma
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo LTC68042configure_programVolatileDefaults: (WIP) needs major attention
+//WGCToDo LTC68042configure_programVolatileDefaults: 2/5 up to date
 // Called from key_handleKeyEvent_on(), LTC68042cell_nextVoltages() LTC_STATE_FIRSTRUN
 // LiBCM version of this is relatively fast (12 SPI bytes => 384us @ 32us/byte)
 // Whereas wakeup() alone takes ~4.3ms! Total is ~6.8ms
-//program configuration register values onto each LTC6804 IC
-//CFGR0:3 are reset when LTC watchdog timer expires (~2000 milliseconds)
-//CFGR4:5 are reset when LTC watchdog timer expires, unless software timer is set (and hasn't expired)
+//program configuration register values onto each MAX17843 IC
 void LTC68042configure_programVolatileDefaults(void)
 {
   bool allOk = 1;
   char msg[30];
-  int Device_count = 0;
   uint32_t moduleId[TOTAL_IC];
   uint16_t registerValue[TOTAL_IC];
 
   MAX1784Xcomms_wakeup();                // Wake up instructions for start up
-  // Hello all command intializes the device address of the ICs in daisy chain.
-  // The returned number of devices is stored in variable "Device_count"
-  Device_count = MAX1784Xcomms_helloall();
-  if ( ! MAX1784Xcomms_checkActualVsExpected(Device_count, TOTAL_IC, "device count", __func__)) {
-    // then this is a potentially fatal error
-    if (TOTAL_IC != Device_count) {
-      // yup, fatal. Can't handle more than TOTAL_IC devices
-      Serial.println(F("FATAL ERROR"));
-      MAX1784Xcomms_max17841_shutdown();
-      while (1);
-    }
-    allOk = 0;
-  }
+  // For BMS_TYPE_WGCLiBCM, "Hello all" command is performed in (modified)
+  //   LTC68042configure_doesActualPackSizeMatchUserConfig(), since "Hello all" is required
+  //   to initialze MAX17843 devices, and it inherently checks the number of
+  //   battery modules found.
+  allOk &= LTC68042configure_doesActualPackSizeMatchUserConfig();
 
   // Note: since ALRTRST bit in STATUS register has not been cleared yet, read back Data check bytes will not be 0
   MAX1784Xcomms_setExpectedDataCheck(DATA_CHECK_EXPECTED_POR);
@@ -145,6 +139,7 @@ void LTC68042configure_programVolatileDefaults(void)
   }
 
   // Read STATUS, and verify all just have M873_STATUS_ALRTRST set, with data-check of DATA_CHECK_EXPECTED_POR
+  //WGCToDo: if M873_STATUS_ALRTRST is not set, do soft POR to reset chip
   strcpy(&(msg[8]), " STATUS");
   MAX1784Xcomms_readAll843Reg(M873_STATUS, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
   for (int DAx = 0; DAx < TOTAL_IC; DAx++) {
@@ -173,91 +168,102 @@ void LTC68042configure_programVolatileDefaults(void)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo LTC68042configure_doesActualPackSizeMatchUserConfig: not implimented yet, and will need work
+//WGCToDo LTC68042configure_doesActualPackSizeMatchUserConfig: 2/5 up to date
 //  Only called from key_handleKeyEvent_off()
 //  For MAX17843, must do a helloall() to start, which returns the
-//    number of devices found. This function will be moot.
+//    number of devices found. So, this function WILL be called when LiBCM first boots.
 //  "we don't have time to run this test if the key is on when LiBCM first boots" may be
 //  an issue for doing the helloall(): it may take too long at first boot.
 bool LTC68042configure_doesActualPackSizeMatchUserConfig(void)
 {
-    //bool helper_doesActualPackSizeMatchUserConfig = true;
+    bool helper_doesActualPackSizeMatchUserConfig = true;
 
-    //#if   defined RUN_BRINGUP_TESTER_MOTHERBOARD //don't verify cell count
-    //#elif defined RUN_BRINGUP_TESTER_GRIDCHARGER //don't verify cell count
-    //#else
-        //if (gpio_keyStateNow() == GPIO_KEY_OFF) //we don't have time to run this test if the key is on when LiBCM first boots
-        //{
-            //LTC6804_adax(); //send any broadcast command
-            //delay(6); //wait for all LTC6804 ICs to process this command
+    #if   defined RUN_BRINGUP_TESTER_MOTHERBOARD //don't verify cell count
+    #elif defined RUN_BRINGUP_TESTER_GRIDCHARGER //don't verify cell count
+    #else
+      #ifndef BMS_TYPE_WGCLiBCM
+        if (gpio_keyStateNow() == GPIO_KEY_OFF) //we don't have time to run this test if the key is on when LiBCM first boots
+        {
+            LTC6804_adax(); //send any broadcast command
+            delay(6); //wait for all LTC6804 ICs to process this command
 
-            //uint8_t errorCount_LTC6804_underTest[TOTAL_IC_60S] = {0}; //allocate for 60S even when user selects 48S
+            uint8_t errorCount_LTC6804_underTest[TOTAL_IC_60S] = {0}; //allocate for 60S even when user selects 48S
 
-            ////read data back from either QTY4 ICs (if user selects PACK_IS_48S in config.h), or QTY5 ICs (if user selects PACK_IS_60S in config.h)
-            ////we don't care about the actual returned data; only that the PEC error count doesn't increment
-            //for (uint8_t dut = 0; dut < TOTAL_IC; dut++)
-            //{
-                //errorCount_LTC6804_underTest[dut] = LTC6804_rdaux(1,1,FIRST_IC_ADDR + dut); //read register 'A' on specified LTC6804
-                //if (errorCount_LTC6804_underTest[dut] != 0) { helper_doesActualPackSizeMatchUserConfig = false; }
-            //}
+            //read data back from either QTY4 ICs (if user selects PACK_IS_48S in config.h), or QTY5 ICs (if user selects PACK_IS_60S in config.h)
+            //we don't care about the actual returned data; only that the PEC error count doesn't increment
+            for (uint8_t dut = 0; dut < TOTAL_IC; dut++)
+            {
+                errorCount_LTC6804_underTest[dut] = LTC6804_rdaux(1,1,FIRST_IC_ADDR + dut); //read register 'A' on specified LTC6804
+                if (errorCount_LTC6804_underTest[dut] != 0) { helper_doesActualPackSizeMatchUserConfig = false; }
+            }
 
-            ////For 48S, verify cells 49:60 aren't present
-            //if (TOTAL_IC == TOTAL_IC_48S)
-            //{
-                //errorCount_LTC6804_underTest[4] = LTC6804_rdaux(1,1,FIRST_IC_ADDR + TOTAL_IC_48S); //attempt to read from 49:60
+            //For 48S, verify cells 49:60 aren't present
+            if (TOTAL_IC == TOTAL_IC_48S)
+            {
+                errorCount_LTC6804_underTest[4] = LTC6804_rdaux(1,1,FIRST_IC_ADDR + TOTAL_IC_48S); //attempt to read from 49:60
 
-                //if (errorCount_LTC6804_underTest[4] == 0) { helper_doesActualPackSizeMatchUserConfig = false; } //49:60 present
-            //}
+                if (errorCount_LTC6804_underTest[4] == 0) { helper_doesActualPackSizeMatchUserConfig = false; } //49:60 present
+            }
+      #else // (and beware of the different code block level!)
+        int Device_count = 0;
 
-            //if (helper_doesActualPackSizeMatchUserConfig == false)
-            //{
-                ////fatal error
-                ////alert user and then turn off
+        // Hello all command intializes the device address of the ICs in daisy chain.
+        // The number of devices that responded is returned
+        Device_count = MAX1784Xcomms_enumerateDevices();
+        if (TOTAL_IC != Device_count) { helper_doesActualPackSizeMatchUserConfig = false; }
+      #endif
+            if (helper_doesActualPackSizeMatchUserConfig == false)
+            {
+                //fatal error
+                //alert user and then turn off
 
-                //Serial.print(F("\nError: measured cell count disagrees with user specified cell count in config.h."
-                               //"\nLiBCM is disabled due to cell voltage monitoring IC issue. Debug:"));
+                Serial.print(F("\nError: measured cell count disagrees with user specified cell count in config.h."
+                               "\nLiBCM is disabled due to cell voltage monitoring IC issue. Debug:"));
+      #ifndef BMS_TYPE_WGCLiBCM
+      //WGCToDo: add print of Device_count
+                //cells 1:48 are the same for both 48S & 60S
+                for (uint8_t dut = 0; dut < TOTAL_IC; dut++)
+                {
+                    Serial.print(F("\nIC"));
+                    Serial.print(dut);
+                    if (errorCount_LTC6804_underTest[dut] == 0) { Serial.print(F(": pass")); }
+                    else                                        { Serial.print(F(": FAIL")); }
+                }
 
-                ////cells 1:48 are the same for both 48S & 60S
-                //for (uint8_t dut = 0; dut < TOTAL_IC; dut++)
-                //{
-                    //Serial.print(F("\nIC"));
-                    //Serial.print(dut);
-                    //if (errorCount_LTC6804_underTest[dut] == 0) { Serial.print(F(": pass")); }
-                    //else                                        { Serial.print(F(": FAIL")); }
-                //}
+                //For 48S, verify cells 49:60 aren't present
+                Serial.print("\nIC4: ");
+                if (TOTAL_IC == TOTAL_IC_48S)
+                {
+                    if (errorCount_LTC6804_underTest[4] == 0) { Serial.print(F("FAIL")); } //IC4 powered by cells 49:60
+                    else                                      { Serial.print(F("pass")); }
+                }
+      #endif
+                lcdTransmit_begin();
+                delay(50); //delay doesn't matter because this is a fatal error
+                lcdTransmit_displayOn();
+                delay(50); //delay doesn't matter because this is a fatal error
+                lcdTransmit_Warning(LCD_WARN_CELL_COUNT);
 
-                ////For 48S, verify cells 49:60 aren't present
-                //Serial.print("\nIC4: ");
-                //if (TOTAL_IC == TOTAL_IC_48S)
-                //{
-                    //if (errorCount_LTC6804_underTest[4] == 0) { Serial.print(F("FAIL")); } //IC4 powered by cells 49:60
-                    //else                                      { Serial.print(F("pass")); }
-                //}
+                gpio_turnBuzzer_on_highFreq(); //call GPIO directly
 
-                //lcdTransmit_begin();
-                //delay(50); //delay doesn't matter because this is a fatal error
-                //lcdTransmit_displayOn();
-                //delay(50); //delay doesn't matter because this is a fatal error
-                //lcdTransmit_Warning(LCD_WARN_CELL_COUNT);
+                wdt_disable(); //turn off watchdog to prevent reset
+                wdt_enable(WDTO_8S);
 
-                //gpio_turnBuzzer_on_highFreq(); //call GPIO directly
+                delay(7000); //give the user enough time to read error message
 
-                //wdt_disable(); //turn off watchdog to prevent reset
-                //wdt_enable(WDTO_8S);
+                gpio_turnLiBCM_off(); //game over... thanks for playing
+            }
+      #ifndef BMS_TYPE_WGCLiBCM
+        }
+      #endif
+    #endif
 
-                //delay(7000); //give the user enough time to read error message
-
-                //gpio_turnLiBCM_off(); //game over... thanks for playing
-            //}
-        //}
-    //#endif
-
-    //return helper_doesActualPackSizeMatchUserConfig;
+    return helper_doesActualPackSizeMatchUserConfig;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo LTC68042configure_initialize: 1/30 up to date, but may have issues
+//WGCToDo LTC68042configure_initialize: 1/30 up to date
 //  Only called from start()
 //  MAX1784X will take many more ms versus LTC. if this is too much delay for 1st loop, could be time-sliced via LTC68042cell_nextVoltages() state machine...
 void LTC68042configure_initialize(void)
@@ -272,53 +278,61 @@ void LTC68042configure_initialize(void)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo LTC68042configure_pulseChipSelectLow: 1/30 up to date (stubbed out)
+//WGCToDo LTC68042configure_pulseChipSelectLow: 1/30 up to date (stubbed out, never called)
 // Called once to provide a 300 usec CS pulse by keyOn_coldBootTasks()
 //   Otherwise just local use in LTC68042configure_wakeupCore() and
 //   LTC68042configure_wakeupIsoSPI()
 void LTC68042configure_pulseChipSelectLow(uint16_t lowPulsePeriod_us)
 {
-    //digitalWrite(PIN_SPI_CS,LOW); //low edge wakes up LTC
-    //delayMicroseconds(lowPulsePeriod_us); //wait specified time for LTC to wake
-    //digitalWrite(PIN_SPI_CS,HIGH);
-    //lastTimeDataSent_millis = millis();
+  #ifndef BMS_TYPE_WGCLiBCM
+    digitalWrite(PIN_SPI_CS,LOW); //low edge wakes up LTC
+    delayMicroseconds(lowPulsePeriod_us); //wait specified time for LTC to wake
+    digitalWrite(PIN_SPI_CS,HIGH);
+    lastTimeDataSent_millis = millis();
+  #endif
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo LTC68042configure_wakeupCore: 1/30 up to date (stubbed out)
+//WGCToDo LTC68042configure_wakeupCore: 1/30 up to date (stubbed out, never called)
 // For MAX1784x, chips ar automatically kept awake by MAX17841 keep-alive function
 // Private method, not used anywhere outside of LTC68042configure_wakeup()
 bool LTC68042configure_wakeupCore(void)
 {
-    //const uint16_t T_SLEEP_WATCHDOG_MILLIS = 1800; //'tsleep' = 1800 (min) to 2200 (max) ms
+  #ifndef BMS_TYPE_WGCLiBCM
+    const uint16_t T_SLEEP_WATCHDOG_MILLIS = 1800; //'tsleep' = 1800 (min) to 2200 (max) ms
 
-    //bool wasCoreAlreadyAwake = LTC6804_CORE_ALREADY_AWAKE;
+    bool wasCoreAlreadyAwake = LTC6804_CORE_ALREADY_AWAKE;
 
-    //if ((uint32_t)(millis() - lastTimeDataSent_millis) > T_SLEEP_WATCHDOG_MILLIS)
-    //{
-        ////LTC6804 core (probably) asleep
-        //LTC68042configure_pulseChipSelectLow(SPECIFIED_MAX_WAKEUP_TIME_LTCCORE_MICROSECONDS);
-        //wasCoreAlreadyAwake = LTC6804_CORE_JUST_WOKE_UP;
-    //}
+    if ((uint32_t)(millis() - lastTimeDataSent_millis) > T_SLEEP_WATCHDOG_MILLIS)
+    {
+        //LTC6804 core (probably) asleep
+        LTC68042configure_pulseChipSelectLow(SPECIFIED_MAX_WAKEUP_TIME_LTCCORE_MICROSECONDS);
+        wasCoreAlreadyAwake = LTC6804_CORE_JUST_WOKE_UP;
+    }
 
-    //return wasCoreAlreadyAwake;
+    return wasCoreAlreadyAwake;
+  #else
+    return LTC6804_CORE_ALREADY_AWAKE; // just to be safe...
+  #endif
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo LTC68042configure_wakeupIsoSPI: 1/30 up to date (stubbed out)
+//WGCToDo LTC68042configure_wakeupIsoSPI: 1/30 up to date (stubbed out, never called)
 // For MAX1784x, chips ar automatically kept awake by MAX17841 keep-alive function
 // Private method, not used anywhere outside of LTC68042configure_wakeup()
 void LTC68042configure_wakeupIsoSPI(void)
 {
-    //const uint8_t T_IDLE_isoSPI_MILLIS = 4; //'tIDLE' = 4.3 (min) to 6.7 (max) ms
+  #ifndef BMS_TYPE_WGCLiBCM
+    const uint8_t T_IDLE_isoSPI_MILLIS = 4; //'tIDLE' = 4.3 (min) to 6.7 (max) ms
 
-    //if ((uint32_t)(millis() - lastTimeDataSent_millis) > T_IDLE_isoSPI_MILLIS)
-    //{
-        ////LTC6804 isoSPI might be asleep (tIDLE elapsed)
-         //LTC68042configure_pulseChipSelectLow(SPECIFIED_MAX_WAKEUP_TIME_isoSPI_MICROSECONDS);
-    //}
+    if ((uint32_t)(millis() - lastTimeDataSent_millis) > T_IDLE_isoSPI_MILLIS)
+    {
+        //LTC6804 isoSPI might be asleep (tIDLE elapsed)
+         LTC68042configure_pulseChipSelectLow(SPECIFIED_MAX_WAKEUP_TIME_isoSPI_MICROSECONDS);
+    }
+  #endif
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -421,13 +435,13 @@ void LTC68042configure_spiWriteRead(
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo LTC68042configure_handleKeyStateChange: not implimented yet
+//WGCToDo LTC68042configure_handleKeyStateChange: 2/5 up to date
 
 void LTC68042configure_handleKeyStateChange(void)
 {
-    //LTC68042result_errorCount_set(0);
-    //LTC68042result_maxEverCellVoltage_set(0);
-    //LTC68042result_minEverCellVoltage_set(65535);
+    LTC68042result_errorCount_set(0);
+    LTC68042result_maxEverCellVoltage_set(0);
+    LTC68042result_minEverCellVoltage_set(65535);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////

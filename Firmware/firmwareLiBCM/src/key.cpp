@@ -28,6 +28,7 @@ void key_handleKeyEvent_off(void)
     vPackSpoof_handleKeyOFF();
     //JTS2doLater: Add built-in test suite, including VREF, VCELL, Balancing, temp verify (batt and OEM), etc.
     eeprom_keyOffCheckForExpiredFirmware();
+    // For BMS_TYPE_WGCLiBCM, this is also (of necesity) done when LiBCM wakes up
     LTC68042configure_doesActualPackSizeMatchUserConfig();
 
     time_latestKeyOff_ms_set(millis()); //MUST RUN LAST!
