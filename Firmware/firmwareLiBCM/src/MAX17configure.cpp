@@ -11,20 +11,31 @@
 
 #include "libcm.h"
 
-// Not needed. Using MAX17841 keep-alive
-//uint32_t lastTimeDataSent_millis = 0; //LTC idle timer resets each time data is transferred
-
-
-/////////////////////////////////////////////////////////////////////////////////////////
-
-//Stores configuration register data to write to IC
 #ifndef BMS_TYPE_WGCLiBCM
+  uint32_t lastTimeDataSent_millis = 0; //LTC idle timer resets each time data is transferred
+
+  //Stores configuration register data to write to IC
   uint8_t configurationRegisterData[6]; //[CFGR0, CFGR1, CFGR2, CFGR3, CFGR4, CFGR5]
+#else
+  uint32_t lastMAX1784xTimestamp_millis = 0; // for optimizing delays
 #endif
+/////////////////////////////////////////////////////////////////////////////////////////
+
+void MAX17841configure_enableMAX17841(void) {
+  digitalWrite(PIN_SHDNL_MAX17841, HIGH); // Enable MAX17841
+  lastMAX1784xTimestamp_millis = millis(); // will need to do t_startup delay
+}
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo MAX17843configure_writeConfigRegisters: 2/5 up to date (stubbed out)
+void MAX17841configure_disableMAX17841(void) {
+  digitalWrite(PIN_SHDNL_MAX17841, LOW); // disable MAX17841
+  lastMAX1784xTimestamp_millis = millis(); // will need to do t_shutdown delay
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+
+//WGCToDo LTC68042configure_writeConfigRegisters: 2/5 up to date (stubbed out)
 //WGCToDo: could resurect this if a need for shadow registers arrises...
 //Write LTC6804 configuration registers
 //if (icAddress == BROADCAST_TO_ALL_ICS), this function broadcasts the same data to all LTC6804 ICs
@@ -33,7 +44,7 @@
 // |-----------|-----------|-----------|-----------|-----------|-----------|
 // | IC CFGR0  | IC CFGR1  | IC CFGR2  | IC CFGR3  | IC CFGR4  | IC CFGR5  |
 
-void MAX17843configure_writeConfigRegisters(uint8_t icAddress)
+void LTC68042configure_writeConfigRegisters(uint8_t icAddress)
 {
   #ifndef BMS_TYPE_WGCLiBCM
     const uint8_t BYTES_IN_REG = 6;
@@ -85,17 +96,39 @@ void LTC68042configure_setBalanceResistors(uint8_t icAddress, uint16_t cellBitma
 /////////////////////////////////////////////////////////////////////////////////////////
 
 //WGCToDo LTC68042configure_programVolatileDefaults: 2/5 up to date
-// Called from key_handleKeyEvent_on(), LTC68042cell_nextVoltages() LTC_STATE_FIRSTRUN
 // LiBCM version of this is relatively fast (12 SPI bytes => 384us @ 32us/byte)
 // Whereas wakeup() alone takes ~4.3ms! Total is ~6.8ms
-//program configuration register values onto each MAX17843 IC
+//Initialize BMS system to "fresh start" state
 void LTC68042configure_programVolatileDefaults(void)
 {
-  bool allOk = 1;
+  bool allOk = true;
   char msg[30];
   uint32_t moduleId[TOTAL_IC];
   uint16_t registerValue[TOTAL_IC];
 
+  // Initialize all MAX1784x chips via reset.
+  // If we are executing after a POR,
+  //   then the reset is done (and we'll verify this),
+  // else do the POR reset here
+  //WGCToDoNow: Options to initialize 871:
+  //  Pulse SHDNL (inducing POR), then write 4 selected registers (2 SPI bytes each), and 1 command (1 SPI byte)
+  //    1uSec tau on SHDNl line, so low time should be ... This actually requires significant delay, so:
+  //  Just write a 7 byte block (2 SPI bytes), and 1 command (1 SPI byte)
+  //  => quicker to write 7 1 byte registers
+  //WGCToDo: Use LTC68042configure_wakeup() instead?
+  if ( (! MAX1784Xcomms_justWokeUp()) ||
+       (! MAX1784Xcomms_max17841_CheckForPOR()) ) {
+    // then a full POR needs to be forced
+    MAX1784Xcomms_max17843_reset();
+    //NB: want to get the MAX1784Xcomms_max17841_Init() done promptly, to keep the keep-alive going
+  }
+  // else the expectation is that MAX17841 and 843 chips are waking from off state
+  MAX1784Xcomms_max17841_Init();
+
+  //WGCToDoNow: It looks like t_startup applies to sending UART messages, not writing to 871, so move delay/wait to after MAX1784Xcomms_max17841_Init()
+  //WGCToDo: convert blocking delays to timestamps/ready checks
+  while(millis() - lastMAX1784xTimestamp_millis < M871_STARTUP_TIME_ms) { ; }
+  //delay(M871_STARTUP_TIME_ms); // wait MAX17841 tstartup (2ms max)
   MAX1784Xcomms_wakeup();                // Wake up instructions for start up
   // For BMS_TYPE_WGCLiBCM, "Hello all" command is performed in (modified)
   //   LTC68042configure_doesActualPackSizeMatchUserConfig(), since "Hello all" is required
@@ -139,7 +172,6 @@ void LTC68042configure_programVolatileDefaults(void)
   }
 
   // Read STATUS, and verify all just have M873_STATUS_ALRTRST set, with data-check of DATA_CHECK_EXPECTED_POR
-  //WGCToDo: if M873_STATUS_ALRTRST is not set, do soft POR to reset chip
   strcpy(&(msg[8]), " STATUS");
   MAX1784Xcomms_readAll843Reg(M873_STATUS, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
   for (int DAx = 0; DAx < TOTAL_IC; DAx++) {
@@ -268,12 +300,10 @@ bool LTC68042configure_doesActualPackSizeMatchUserConfig(void)
 //  MAX1784X will take many more ms versus LTC. if this is too much delay for 1st loop, could be time-sliced via LTC68042cell_nextVoltages() state machine...
 void LTC68042configure_initialize(void)
 {
-    digitalWrite(PIN_SHDNL_MAX17841, HIGH); // Enable MAX17841
+    MAX17841configure_enableMAX17841(); // get a head start on tstartup delay
     pinMode(PIN_SHDNL_MAX17841, OUTPUT);
+    MAX1784Xcomms_setJustWokeUpState(true);
     spi_enable(SPI_CLOCK_DIV64); //JTS2doLater: increase clock speed //DIV16 & DIV32 work on bench
-    //WGCToDo: convert blocking delays to timestamps/ready checks
-    delay(M871_STARTUP_TIME_ms); // wait MAX17841 tstartup (2ms max)
-    MAX1784Xcomms_max17841_Init();
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -338,20 +368,21 @@ void LTC68042configure_wakeupIsoSPI(void)
 /////////////////////////////////////////////////////////////////////////////////////////
 
 //WGCToDo LTC68042configure_wakeup: 1/30 up to date, needs testing
-// For MAX1784x, chips are automatically kept awake by MAX17841 keep-alive function
-// Need to return LTC6804_CORE_JUST_WOKE_UP on the first call, and LTC6804_CORE_ALREADY_AWAKE thereafter
+// For MAX1784x, chips are automatically kept awake by MAX17841 keep-alive function,
+//   and this function now just returns the JUST_WOKE_UP vs ALREADY_AWAKE state;
+//   it doesn't wake anything up...
 bool LTC68042configure_wakeup(void)
 {
-    //bool wasCoreAlreadyAwake = LTC68042configure_wakeupCore();
-    static bool wasCoreAlreadyAwake = LTC6804_CORE_JUST_WOKE_UP;
+  #ifndef BMS_TYPE_WGCLiBCM
+    bool wasCoreAlreadyAwake = LTC68042configure_wakeupCore();
 
-    //if (wasCoreAlreadyAwake == LTC6804_CORE_ALREADY_AWAKE) { LTC68042configure_wakeupIsoSPI(); }
-    if (LTC6804_CORE_JUST_WOKE_UP == wasCoreAlreadyAwake) {
-       wasCoreAlreadyAwake = LTC6804_CORE_ALREADY_AWAKE;
-       return LTC6804_CORE_JUST_WOKE_UP;
-    }
+    if (wasCoreAlreadyAwake == LTC6804_CORE_ALREADY_AWAKE) { LTC68042configure_wakeupIsoSPI(); }
 
     return wasCoreAlreadyAwake;
+  #else
+    if (MAX1784Xcomms_justWokeUp()) { return LTC6804_CORE_JUST_WOKE_UP;  }
+    else                            { return LTC6804_CORE_ALREADY_AWAKE; }
+  #endif
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////

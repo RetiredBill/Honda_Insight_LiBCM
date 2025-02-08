@@ -86,8 +86,12 @@
   };
 
   // Exteral (public) functions
+  bool MAX1784Xcomms_justWokeUp(void);
+  void MAX1784Xcomms_setJustWokeUpState(bool justWokeUp);
+  bool MAX1784Xcomms_max17841_CheckForPOR(void);
   void MAX1784Xcomms_max17841_Init(void);
   void MAX1784Xcomms_setup843Registers(int Device_count);
+  void MAX1784Xcomms_max17843_reset(void);
   void MAX1784Xcomms_max17841_shutdown(void);
   void MAX1784Xcomms_wakeup(void);
   int  MAX1784Xcomms_enumerateDevices(void);

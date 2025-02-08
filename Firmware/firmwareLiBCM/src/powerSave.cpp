@@ -28,7 +28,7 @@ void powerSave_turnOffLiBCM_ifPackEmpty(void)
     else if ((LTC68042result_loCellVoltage_get() < CELL_VMIN_KEYOFF) && //battery is low
              (time_hasKeyBeenOffLongEnough_toTurnOffLiBCM() == true) && //give user time to plug in charger
              (gpio_isGridChargerChargingNow() == NO)                  ) //grid charger isn't charging
-    {   
+    {
         Serial.print(F("\nBattery is low"));
         gpio_turnLiBCM_off(); //game over, thanks for playing
     }
@@ -84,7 +84,7 @@ void wakeupInterrupts_timer2_enable(void)
 {
     power_timer2_enable();  //enable timer2 clock
     TCNT2 = 0; //set timer2 count to zero
-    TIFR2  |= (1 << TOV2 ); //clear pending interrupt flag, if set      
+    TIFR2  |= (1 << TOV2 ); //clear pending interrupt flag, if set
     TIMSK2 |= (1 << TOIE2); //enable timer2 overflow interrupt
 }
 
@@ -131,7 +131,8 @@ void powerSave_gotoSleep(void)
     interruptSource = USB_INTERRUPT; //see ISR(PCINT1_vect) for more info
 
     LED_turnAllOff(); //saves power
-    
+    //WGCToDo: turn off MAX1784X chips...
+
     USB_delayUntilTransmitBufferEmpty();
     USB_end();
 
@@ -226,14 +227,14 @@ ISR(PCINT0_vect)
 //this interrupt disabled when LiBCM is awake
 ISR(PCINT1_vect)
 {
-    //interruptSource = USB_INTERRUPT; //this code isn't guaranteed to run (see below) 
+    //interruptSource = USB_INTERRUPT; //this code isn't guaranteed to run (see below)
     //wakeupInterrupts_disable();      //this code isn't guaranteed to run (see below)
 
     //the hardware pin change interrupt that occurs when USB Rx pin toggles is guaranteed to wake the CPU from sleep.
     //HOWEVER, the code in PCINT1_vect ISR isn't guaranteed to run (and probably won't), as explained next.
     //This was super annoying to figure out, hence the labored explanation:
     //
-    //From the atmega2560 manual, Chapter 15 "External interrupts": 
+    //From the atmega2560 manual, Chapter 15 "External interrupts":
         //"Note that if a level triggered interrupt is used for wake-up from Power-down," ...
         //..."the required level must be held long enough for the MCU to complete the wake-up to trigger the level interrupt."
         //"If the level disappears before the end of the Start-up Time, the MCU will still wake up, but no interrupt will be generated."

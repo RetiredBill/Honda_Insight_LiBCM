@@ -330,5 +330,7 @@
     void LTC68042configure_setBalanceResistors(uint8_t icAddress, uint16_t cellBitmap, uint8_t softwareTimeout);
     bool LTC68042configure_doesActualPackSizeMatchUserConfig(void);
     void LTC68042configure_pulseChipSelectLow(uint16_t lowPulsePeriod_us);
+    void MAX17841configure_enableMAX17841(void);
+    void MAX17841configure_disableMAX17841(void);
 
 #endif

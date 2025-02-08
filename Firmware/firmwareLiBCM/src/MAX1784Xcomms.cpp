@@ -5,14 +5,20 @@
 
 #include "libcm.h"
 
-bool justWokeUp = true;
+// POR state for BMS system: This determines if the BMS chips need to be reset or not
+bool m873JustWokeUp = true;
+bool MAX1784Xcomms_justWokeUp(void)                    { return m873JustWokeUp; }
+void MAX1784Xcomms_setJustWokeUpState(bool justWokeUp) { m873JustWokeUp = justWokeUp; }
+
+bool max871JustWokeUp = true; // first message received state
+
 uint8_t m873AliveCountSeed = ALIVE_COUNT_DISABLE; // (private) MAX17843 alive-count message ID tracker
-void MAX1784Xcomms_enableAliveCount(void) {m873AliveCountSeed = ALIVE_COUNT_ENABLE;}
-void MAX1784Xcomms_disableAliveCount(void) {m873AliveCountSeed = ALIVE_COUNT_DISABLE;}
+void MAX1784Xcomms_enableAliveCount(void)  { m873AliveCountSeed = ALIVE_COUNT_ENABLE; }
+void MAX1784Xcomms_disableAliveCount(void) { m873AliveCountSeed = ALIVE_COUNT_DISABLE; }
 
 uint8_t m873ExpectedDataCheck = 0;// expected value of received data-check byte
-uint8_t MAX1784Xcomms_getExpectedDataCheck(void) {return m873ExpectedDataCheck;}
-void MAX1784Xcomms_setExpectedDataCheck(uint8_t expectedDC) {m873ExpectedDataCheck = expectedDC;}
+uint8_t MAX1784Xcomms_getExpectedDataCheck(void)               { return m873ExpectedDataCheck; }
+void    MAX1784Xcomms_setExpectedDataCheck(uint8_t expectedDC) { m873ExpectedDataCheck = expectedDC; }
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -58,6 +64,22 @@ uint16_t MAX1784Xcomms_ReadModelAndVersion(void)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
+bool MAX1784Xcomms_max17841_CheckForPOR(void)
+{
+  const uint8_t CMD_LENGTH = 1; // bytes in command
+  const uint8_t DATA_LENGTH = 1;
+  uint8_t cmd[CMD_LENGTH];
+  uint8_t data[DATA_LENGTH];
+
+  // check POR flag
+  cmd[0] = M871_READREG_TX_INTERRUPT_FLAGS;
+  LTC68042configure_spiWriteRead(cmd, CMD_LENGTH, data, DATA_LENGTH);
+  if (BITVALUE(M871_TX_FLAG_POR_Flag) & data[0]) {return true; } // POR flag was set
+  else                                           {return false;} //  it was not
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+
 //initialize the MAX17841 ASCI chip configuration
 //WGCToDo: Add the other MAX17841 registers, rather than depending on power-on values?
 void MAX1784Xcomms_max17841_Init(void)
@@ -72,14 +94,18 @@ void MAX1784Xcomms_max17841_Init(void)
   // mod/version should be 0x8417
   MAX1784Xcomms_checkActualVsExpected(
     MAX1784Xcomms_ReadModelAndVersion(),
-    ((M871_MODEL) << (M871_VERSION_bfModelLsb_SIZE)) | (M871_VERSION),
+    (uint16_t)((M871_MODEL << M871_VERSION_bfModelLsb_SIZE) | M871_VERSION),
     "Model/Version", __func__);
 
   // check and then clear POR flag
   cmd[0] = M871_READREG_TX_INTERRUPT_FLAGS;
   LTC68042configure_spiWriteRead(cmd, CMD_LENGTH_1, data, 1);
-  MAX1784Xcomms_checkActualVsExpected(data[0], BITVALUE(M871_TX_FLAG_POR_Flag), "POR flag", __func__);
-  //WGCToDo: if POR flag is not set, do a shutdown first to propperly reset everything
+  if (MAX1784Xcomms_justWokeUp()) {
+    MAX1784Xcomms_checkActualVsExpected(data[0], BITVALUE(M871_TX_FLAG_POR_Flag), "POR flag", __func__);
+  }
+  else {
+    MAX1784Xcomms_checkActualVsExpected(data[0], M871_CLEAR_ALL, "POR flag", __func__);
+  }
   cmd[0] = M871_WRITEREG_TX_INTERRUPT_FLAGS;
   cmd[1] = M871_CLEAR_ALL;
   LTC68042configure_spiWrite(CMD_LENGTH_2, cmd);
@@ -110,30 +136,39 @@ void MAX1784Xcomms_max17841_Init(void)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-// Shutdown sequence for waking MAX17841 ASCI chip:
-//   Make sure MAX17843 chips see a reset, then shut down MAX17841
-void MAX1784Xcomms_max17841_shutdown(void)
+// Set the MAX17843 chips to their POR state
+void MAX1784Xcomms_max17843_reset(void)
 {
-  uint8_t cmd[7];
-
   // Try to force GPIO3 low to make sure SHDNL is not driven high, just in case
   MAX1784Xcomms_writeAll843Reg(M873_GPIO, TOTAL_IC, M871_CLEAR_ALL, MCONT_FULL_CHECKS);
-  // Do soft POR on all MAX17843 chips
-  //  7 DEVCFG1.FORCEPOR  clear
-  //  0 DEVCFG1.SPOR      set
   // This will change to no longer returning alive-count, so
   MAX1784Xcomms_disableAliveCount();  // disable alive-count checking
-  // Note: since this is resetting the chips, I can't use the standard writeAll843Reg(),
-  //   no message is getting returned...
-  MAX1784Xcomms_writeAll843Reg(M873_DEVCFG1, TOTAL_IC, BITVALUE(M873_DEVCFG1_SPOR), MCONT_NO_RX_NO_CHECKS);
+  MAX1784Xcomms_setExpectedDataCheck(DATA_CHECK_EXPECTED_POR);
+  max871JustWokeUp = true; //WGCToDo: seems like this should be in MAX1784Xcomms_max17841_shutdown(), but it works here...
   // Force POR on all MAX17843 chips
   //  7 DEVCFG1.FORCEPOR  set
   //  0 DEVCFG1.SPOR      set
-  MAX1784Xcomms_writeAll843Reg(M873_DEVCFG1, TOTAL_IC, (BITVALUE(M873_DEVCFG1_FORCEPOR) | BITVALUE(M873_DEVCFG1_SPOR)), MCONT_NO_RX_NO_CHECKS);
+  // Note: since this is resetting the chips, no message is getting returned...
+  MAX1784Xcomms_writeAll843Reg(M873_DEVCFG1, TOTAL_IC,
+    (BITVALUE(M873_DEVCFG1_FORCEPOR) | BITVALUE(M873_DEVCFG1_SPOR)), MCONT_NO_RX_NO_CHECKS);
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+
+// Shutdown sequence for MAX17841 ASCI chip:
+//   Make sure MAX17843 chips see a reset, then shut down MAX17841
+void MAX1784Xcomms_max17841_shutdown(void)
+{
+  MAX1784Xcomms_max17843_reset();
 
   // Disable MAX17841
-  digitalWrite(PIN_SHDNL_MAX17841, LOW);
-  delay(2); //WGCToDo: is there a specified time for this?
+  MAX17841configure_disableMAX17841();
+  // If there is not a long enough delay, then the MAX17843 chips will report STATUS errors
+  //   probably due to SHDNl just sagging, and not going low enough to provide a clean power on
+  //  0-8 ms too short; get manchester/parity errors on many devices
+  //  10-11 gives ALRTSHDNL and (expected) ALRTRST on many devices
+  //  12 and above (tested to 20) works, getting just (expected) ALRTRST, but is a long time!
+  //delay(12); //Assume this delay will be taken care of by sleep or whatever...
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -350,9 +385,9 @@ digitalWrite(PIN_LASIG, HIGH);
     //WGCToDo: checking more status bits than just these for now...
     cmd[0] = M871_READREG_RX_BYTE;
     LTC68042configure_spiWriteRead(cmd, 1, rxBuff, 1);
-    if (justWokeUp) {
+    if (max871JustWokeUp) {
       // then this is the first usage, and Last_Byte should be 0
-      justWokeUp = false;
+      max871JustWokeUp = false;
       allOK &= MAX1784Xcomms_checkActualVsExpected(
         ( (   BITVALUE(M871_RX_BYTE_First_Byte)
             | BITVALUE(M871_RX_BYTE_Byte_Error)
@@ -837,7 +872,7 @@ void MAX1784Xcomms_setup843Registers(int Device_count)
   MAX1784Xcomms_writeAll843Reg(M873_STATUS, Device_count, M873_STATUS_INIT, MCONT_FULL_CHECKS);
 
   // since STATUS has now been cleared, from this point on data-check should be DATA_CHECK_EXPECTED_NORMAL
-  m873ExpectedDataCheck = DATA_CHECK_EXPECTED_NORMAL;
+  MAX1784Xcomms_setExpectedDataCheck(DATA_CHECK_EXPECTED_NORMAL);
 
   // Set DEVCFG1
   MAX1784Xcomms_writeAll843Reg(M873_DEVCFG1, Device_count, M873_DEVCFG1_INIT, MCONT_FULL_CHECKS);
@@ -861,6 +896,9 @@ void MAX1784Xcomms_setup843Registers(int Device_count)
 
   // set DIAGCFG
   MAX1784Xcomms_writeAll843Reg(M873_DIAGCFG, Device_count, M873_DIAGSEL_DieTemperature, MCONT_FULL_CHECKS);
+
+  // and wake-up is complete
+  MAX1784Xcomms_setJustWokeUpState(false);
 }
 
 
