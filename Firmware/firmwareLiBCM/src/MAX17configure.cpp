@@ -123,6 +123,9 @@ void LTC68042configure_programVolatileDefaults(void)
     //NB: want to get the MAX1784Xcomms_max17841_Init() done promptly, to keep the keep-alive going
   }
   // else the expectation is that MAX17841 and 843 chips are waking from off state
+  MAX17841configure_enableMAX17841();
+  //WGCToDo: convert blocking delays to timestamps/ready checks
+  delay(M871_STARTUP_TIME_ms); //WGCToDo: some delay is needed here, maybe not a full 2ms
   MAX1784Xcomms_max17841_Init();
 
   //WGCToDoNow: It looks like t_startup applies to sending UART messages, not writing to 871, so move delay/wait to after MAX1784Xcomms_max17841_Init()

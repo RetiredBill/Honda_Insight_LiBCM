@@ -131,7 +131,10 @@ void powerSave_gotoSleep(void)
     interruptSource = USB_INTERRUPT; //see ISR(PCINT1_vect) for more info
 
     LED_turnAllOff(); //saves power
-    //WGCToDo: turn off MAX1784X chips...
+    if (! MAX1784Xcomms_justWokeUp()) {
+        // then the MAX1784X chips are on, so...
+        MAX1784Xcomms_max17841_shutdown(); //also saves power
+    }
 
     USB_delayUntilTransmitBufferEmpty();
     USB_end();
@@ -158,6 +161,8 @@ void powerSave_gotoSleep(void)
         wakeupInterrupts_disable();
     }
     interrupts();
+
+    MAX1784Xcomms_setJustWokeUpState(true);
 
     USB_begin();
 
