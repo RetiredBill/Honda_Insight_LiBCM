@@ -173,6 +173,7 @@ void validateAndStoreNextMAX17843(uint8_t chipAddress)
     {
         readOk &= MAX1784Xcomms_readBlock843(M873_CELL1, (1 + M873_TOTAL - M873_CELL1), chipAddress, rawReadings, MCONT_RX_NO_CHECKS);
         readOk &= MAX1784Xcomms_readDev843Reg(M873_DIAG, chipAddress, &(rawReadings[16]), MCONT_RX_NO_CHECKS);
+        if (attemptCounter++ > 1) { LTC68042result_errorCount_increment(); } //log each error
     } while ((!readOk) && (attemptCounter < MAX_READ_ATTEMPTS)); //retry if error
 
     //store cell voltage results
@@ -193,6 +194,7 @@ void validateAndStoreNextMAX17843(uint8_t chipAddress)
             //  from 12 to 14 bits of resolution. LSBs are always 0
             cellVoltages_counts[chipAddress][cell] =  (uint16_t)((float)rawReadings[cell] * 0.762939);
         }
+        //WGCToDo: put thermistor, die temp values somewhere...
     }
 }
 

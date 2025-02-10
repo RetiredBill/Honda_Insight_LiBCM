@@ -35,7 +35,7 @@ void MAX17841configure_disableMAX17841(void) {
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo LTC68042configure_writeConfigRegisters: 2/5 up to date (stubbed out)
+//For BMS_TYPE_WGCLiBCM, LTC68042configure_writeConfigRegisters is #ifndef'd out
 //WGCToDo: could resurect this if a need for shadow registers arrises...
 //Write LTC6804 configuration registers
 //if (icAddress == BROADCAST_TO_ALL_ICS), this function broadcasts the same data to all LTC6804 ICs
@@ -78,26 +78,30 @@ void LTC68042configure_writeConfigRegisters(uint8_t icAddress)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo LTC68042configure_setBalanceResistors: not implimented yet
-
 //configure discharge resistor states on a single LTC6804 IC (CFGR4:5)
 void LTC68042configure_setBalanceResistors(uint8_t icAddress, uint16_t cellBitmap, uint8_t softwareTimeout)
 {
+  #ifndef BMS_TYPE_WGCLiBCM
     //Each bit in cellBitmap corresponds to a specific cell's DCCn discharge bit
     //Example: cellBitmap = 0b0000 1000 0000 0011 enables discharge on cells 12, 2, and 1 //LSB is cell01
     //Example: cellBitmap = 0b0000 1111 1111 1111 enables discharge on all cells
     //See Table36
-    //configurationRegisterData[4] = (uint8_t)(cellBitmap); //LSByte
-    //configurationRegisterData[5] = ( ((uint8_t)(cellBitmap >> 8)) | softwareTimeout ); //MSByte's lower nibble
+    configurationRegisterData[4] = (uint8_t)(cellBitmap); //LSByte
+    configurationRegisterData[5] = ( ((uint8_t)(cellBitmap >> 8)) | softwareTimeout ); //MSByte's lower nibble
 
-    //MAX17843configure_writeConfigRegisters(icAddress);
+    MAX17843configure_writeConfigRegisters(icAddress);
+  #else
+    //WGCToDo LTC68042configure_setBalanceResistors: not implimented yet
+    //called at KEY_OFF_UPDATE_PERIOD_ONE_SECOND_ms (1 sec) intervals
+    //softwareTimeout is LTC6804_DISCHARGE_TIMEOUT_02_SECONDS, which is 0! (as of 2/9/25)
+
+  #endif
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo LTC68042configure_programVolatileDefaults: 2/5 up to date
-// LiBCM version of this is relatively fast (12 SPI bytes => 384us @ 32us/byte)
-// Whereas wakeup() alone takes ~4.3ms! Total is ~6.8ms
+// Compared to BMS_TYPE_WGCLiBCM, LiBCM version of this is relatively fast (12 SPI bytes => 384us @ 32us/byte),
+//   whereas for BMS_TYPE_WGCLiBCMm, wakeup() alone takes ~4.3ms! Total is ~6.8ms
 //Initialize BMS system to "fresh start" state
 void LTC68042configure_programVolatileDefaults(void)
 {
@@ -106,7 +110,7 @@ void LTC68042configure_programVolatileDefaults(void)
   uint32_t moduleId[TOTAL_IC];
   uint16_t registerValue[TOTAL_IC];
 
-  // Initialize all MAX1784x chips via reset.
+  // Initialize all MAX17843 chips via reset.
   // If we are executing after a POR,
   //   then the reset is done (and we'll verify this),
   // else do the POR reset here
@@ -117,21 +121,20 @@ void LTC68042configure_programVolatileDefaults(void)
   //  => quicker to write 7 1 byte registers
   //WGCToDo: Use LTC68042configure_wakeup() instead?
   if ( (! MAX1784Xcomms_justWokeUp()) ||
-       (! MAX1784Xcomms_max17841_CheckForPOR()) ) {
+       (! MAX1784Xcomms_max17841_CheckForPOR()) ) { //WGCToDo: may not also need this condition
     // then a full POR needs to be forced
     MAX1784Xcomms_max17843_reset();
     //NB: want to get the MAX1784Xcomms_max17841_Init() done promptly, to keep the keep-alive going
   }
   // else the expectation is that MAX17841 and 843 chips are waking from off state
+  //WGCToDo: this and delay() could be optimized; isn't always needed
   MAX17841configure_enableMAX17841();
   //WGCToDo: convert blocking delays to timestamps/ready checks
   delay(M871_STARTUP_TIME_ms); //WGCToDo: some delay is needed here, maybe not a full 2ms
   MAX1784Xcomms_max17841_Init();
 
-  //WGCToDoNow: It looks like t_startup applies to sending UART messages, not writing to 871, so move delay/wait to after MAX1784Xcomms_max17841_Init()
   //WGCToDo: convert blocking delays to timestamps/ready checks
   while(millis() - lastMAX1784xTimestamp_millis < M871_STARTUP_TIME_ms) { ; }
-  //delay(M871_STARTUP_TIME_ms); // wait MAX17841 tstartup (2ms max)
   MAX1784Xcomms_wakeup();                // Wake up instructions for start up
   // For BMS_TYPE_WGCLiBCM, "Hello all" command is performed in (modified)
   //   LTC68042configure_doesActualPackSizeMatchUserConfig(), since "Hello all" is required
@@ -195,7 +198,7 @@ void LTC68042configure_programVolatileDefaults(void)
     msg[7] = (char)DAx + '0';
     allOk &= MAX1784Xcomms_checkActualVsExpected(registerValue[DAx], M873_CLEAR_ALL, msg, __func__);
   }
-  //WGCToDo speedup: end of checks to deffer
+  //WGCToDo speedup: end of checks to defer
 
   // configure all MAX17842 registers
   MAX1784Xcomms_setup843Registers(TOTAL_IC);
@@ -203,12 +206,10 @@ void LTC68042configure_programVolatileDefaults(void)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo LTC68042configure_doesActualPackSizeMatchUserConfig: 2/5 up to date
-//  Only called from key_handleKeyEvent_off()
-//  For MAX17843, must do a helloall() to start, which returns the
-//    number of devices found. So, this function WILL be called when LiBCM first boots.
-//  "we don't have time to run this test if the key is on when LiBCM first boots" may be
-//  an issue for doing the helloall(): it may take too long at first boot.
+// For MAX17843, must do a helloall() to start, which returns the
+//   number of devices found. So, this function WILL be called when LiBCM first boots.
+//WGCToDo: "we don't have time to run this test if the key is on when LiBCM first boots" may be
+//   an issue for doing the helloall(): it may take too long at first boot.
 bool LTC68042configure_doesActualPackSizeMatchUserConfig(void)
 {
     bool helper_doesActualPackSizeMatchUserConfig = true;
@@ -254,8 +255,8 @@ bool LTC68042configure_doesActualPackSizeMatchUserConfig(void)
 
                 Serial.print(F("\nError: measured cell count disagrees with user specified cell count in config.h."
                                "\nLiBCM is disabled due to cell voltage monitoring IC issue. Debug:"));
+      //WGCToDo: add print of Device_count on failure
       #ifndef BMS_TYPE_WGCLiBCM
-      //WGCToDo: add print of Device_count
                 //cells 1:48 are the same for both 48S & 60S
                 for (uint8_t dut = 0; dut < TOTAL_IC; dut++)
                 {
@@ -298,9 +299,6 @@ bool LTC68042configure_doesActualPackSizeMatchUserConfig(void)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo LTC68042configure_initialize: 1/30 up to date
-//  Only called from start()
-//  MAX1784X will take many more ms versus LTC. if this is too much delay for 1st loop, could be time-sliced via LTC68042cell_nextVoltages() state machine...
 void LTC68042configure_initialize(void)
 {
     MAX17841configure_enableMAX17841(); // get a head start on tstartup delay
@@ -311,10 +309,7 @@ void LTC68042configure_initialize(void)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo LTC68042configure_pulseChipSelectLow: 1/30 up to date (stubbed out, never called)
-// Called once to provide a 300 usec CS pulse by keyOn_coldBootTasks()
-//   Otherwise just local use in LTC68042configure_wakeupCore() and
-//   LTC68042configure_wakeupIsoSPI()
+// For BMS_TYPE_WGCLiBCM, LTC68042configure_pulseChipSelectLow is #ifndef'd out, never called
 void LTC68042configure_pulseChipSelectLow(uint16_t lowPulsePeriod_us)
 {
   #ifndef BMS_TYPE_WGCLiBCM
@@ -327,9 +322,8 @@ void LTC68042configure_pulseChipSelectLow(uint16_t lowPulsePeriod_us)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo LTC68042configure_wakeupCore: 1/30 up to date (stubbed out, never called)
-// For MAX1784x, chips ar automatically kept awake by MAX17841 keep-alive function
-// Private method, not used anywhere outside of LTC68042configure_wakeup()
+// For BMS_TYPE_WGCLiBCM, LTC68042configure_wakeupCore is #ifndef'd out, never called.
+//   MAX1784x chips are automatically kept awake by MAX17841 keep-alive function.
 bool LTC68042configure_wakeupCore(void)
 {
   #ifndef BMS_TYPE_WGCLiBCM
@@ -352,9 +346,8 @@ bool LTC68042configure_wakeupCore(void)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo LTC68042configure_wakeupIsoSPI: 1/30 up to date (stubbed out, never called)
-// For MAX1784x, chips ar automatically kept awake by MAX17841 keep-alive function
-// Private method, not used anywhere outside of LTC68042configure_wakeup()
+// For BMS_TYPE_WGCLiBCM, LTC68042configure_wakeupIsoSPI is #ifndef'd out, never called.
+//   MAX1784x chips are automatically kept awake by MAX17841 keep-alive function.
 void LTC68042configure_wakeupIsoSPI(void)
 {
   #ifndef BMS_TYPE_WGCLiBCM
@@ -370,8 +363,7 @@ void LTC68042configure_wakeupIsoSPI(void)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo LTC68042configure_wakeup: 1/30 up to date, needs testing
-// For MAX1784x, chips are automatically kept awake by MAX17841 keep-alive function,
+// For BMS_TYPE_WGCLiBCM, MAX1784x chips are automatically kept awake by MAX17841 keep-alive function,
 //   and this function now just returns the JUST_WOKE_UP vs ALREADY_AWAKE state;
 //   it doesn't wake anything up...
 bool LTC68042configure_wakeup(void)
@@ -390,8 +382,7 @@ bool LTC68042configure_wakeup(void)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//WGCToDo LTC68042configure_calcPEC15: 1/30 up to date, expect OK
-// This function has more affinity with MAX1784Xcomms.
+//WGCToDo LTC68042configure_calcPEC15: This function has more affinity with MAX1784Xcomms.
 // For MAX1784x, PEC is actually a CRC8, not CRC15
 uint16_t LTC68042configure_calcPEC15(uint8_t len, //data array length
                                      uint8_t const data[] ) //data array to generate PEC from
@@ -468,8 +459,6 @@ void LTC68042configure_spiWriteRead(
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
-
-//WGCToDo LTC68042configure_handleKeyStateChange: 2/5 up to date
 
 void LTC68042configure_handleKeyStateChange(void)
 {
