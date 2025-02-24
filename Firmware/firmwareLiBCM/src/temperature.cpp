@@ -13,6 +13,10 @@ int8_t tempIntake  = ROOM_TEMP_DEGC;
 int8_t tempExhaust = ROOM_TEMP_DEGC;
 int8_t tempCharger = ROOM_TEMP_DEGC;
 int8_t tempAmbient = ROOM_TEMP_DEGC;
+#ifdef BMS_TYPE_WGCLiBCM
+uint16_t tempModuleDie_counts[TOTAL_IC];
+uint16_t tempModuleTherm_counts[TOTAL_IC][2];
+#endif
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -21,6 +25,12 @@ int8_t temperature_intake_getLatest(void)     { return tempIntake;  } //GRN OEM 
 int8_t temperature_exhaust_getLatest(void)    { return tempExhaust; } //YEL OEM temp sensor
 int8_t temperature_gridCharger_getLatest(void){ return tempCharger; } //BLU OEM temp sensor
 int8_t temperature_ambient_getLatest(void)    { return tempAmbient; } //WHT OEM temp sensor
+#ifdef BMS_TYPE_WGCLiBCM
+uint16_t temperature_ModuleDie_getLatest_counts(uint8_t icAddress)                       { return tempModuleDie_counts[icAddress];               }
+void     temperature_ModuleDie_setLatest_counts(uint8_t icAddress, uint16_t temp_counts) {        tempModuleDie_counts[icAddress] = temp_counts; }
+uint16_t temperature_ModuleTherm_getLatest_counts(uint8_t icAddress, uint8_t thermistor)                      { return tempModuleTherm_counts[icAddress][thermistor];               }
+void     temperature_ModuleTherm_setLatest_counts(uint8_t icAddress, uint8_t thermistor, uint8_t temp_counts) {        tempModuleTherm_counts[icAddress][thermistor] = temp_counts; }
+#endif
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -57,7 +67,7 @@ void temperature_measureBattery(void)
     #elif defined BMS_TYPE_WGCLiBCM
     #ifndef WGC_BB1HW
     #error (Samsung SDI Battery module temp sensing not implimented yet)
-    //WGCToDo: CRITICAL Add SPI module temp sensing
+    //WGCToDo: CRITICAL Add SDI module temp sensing
     #endif
     #endif
 

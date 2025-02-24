@@ -38,6 +38,16 @@ bool cellsAreBalancing = NO;
 bool cellBalance_areCellsBalancing(void) { return cellsAreBalancing; }
 
 /////////////////////////////////////////////////////////////////////////////////////////
+// Print out the die temperature represented by a 14 bit thermistor raw count
+void dieRawCounts2Temp(uint16_t rawCounts)
+{
+  // 1/(3.07 mv/degC A_VP_PTAT) => 325.733
+  float vPTAT = ((unsigned int)(rawCounts) >> 2) * 2.307 / 16384 ;
+  float dieTemp = 32.0 + (1.8 * ((vPTAT * 325.733) - 273));
+  Serial.print(dieTemp, 3);
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
 
 //JTS2doLater: Always allow discharge balancing when a cell is overcharged (for safety)
 //JTS2doLater: Write keyOff test that measures each cell voltage twice: once with discharge resistor off, and again with resistor on.
@@ -52,6 +62,7 @@ void configureDischargeResistors(void)
     uint16_t cellsToDischarge[TOTAL_IC] = {0}; //each uint16's QTY12 LSBs correspond to each LTC6804's QTY12 cells
   #ifdef BMS_TYPE_WGCLiBCM
     static bool doOddNotEven = true; // alternate between even and odd cells
+    uint16_t cellsToDischargeEvenOdd = 0;
   #endif
 
     cellsAreBalancing = NO;
@@ -60,6 +71,7 @@ void configureDischargeResistors(void)
     else { cellDischargeVoltageThreshold = LTC68042result_loCellVoltage_get() + balanceHysteresis; }
 
     //determine which cells to balance
+  #ifndef BMS_TYPE_WGCLiBCM
     for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
     {
         for (uint8_t cell = 0; cell < CELLS_PER_IC; cell++)
@@ -73,21 +85,34 @@ void configureDischargeResistors(void)
             }
         }
 
-  #ifdef BMS_TYPE_WGCLiBCM
-        uint16_t cellsToDischargeEvenOdd;
-        if (doOddNotEven) { cellsToDischargeEvenOdd = 0xAAA & cellsToDischarge[ic]; }
-        else {              cellsToDischargeEvenOdd = 0x555 & cellsToDischarge[ic]; }
-        debugUSB_setCellBalanceStatus(ic, cellsToDischargeEvenOdd, cellDischargeVoltageThreshold);
-        LTC68042configure_setBalanceResistors(ic, cellsToDischargeEvenOdd, LTC6804_DISCHARGE_TIMEOUT_02_SECONDS);
-  #else
         debugUSB_setCellBalanceStatus(ic, cellsToDischarge[ic], cellDischargeVoltageThreshold);
         LTC68042configure_setBalanceResistors((ic + FIRST_IC_ADDR), cellsToDischarge[ic], LTC6804_DISCHARGE_TIMEOUT_02_SECONDS);
-  #endif
     }
-  #ifdef BMS_TYPE_WGCLiBCM
-    doOddNotEven = ! doOddNotEven;
-  #endif
+  #else
+    for (uint8_t ic = 0; ic < TOTAL_IC; ic++) {
+        // Only balance if die temperature is below limit
+        dieRawCounts2Temp(temperature_ModuleDie_getLatest_counts(ic)); Serial.print(" ");//WGCToDo: temporary debugging
+        if (temperature_ModuleDie_getLatest_counts(ic) < TEMPERATURE_MAX_CELL_BALANCE_DIE_TEMP_counts) {
+            for (uint8_t cell = 0; cell < CELLS_PER_IC; cell++)
+            {
+                if (LTC68042result_specificCellVoltage_get(ic, cell) > cellDischargeVoltageThreshold)
+                {
+                    //this cell voltage is higher than the lowest cell voltage + hysteresis
+                    cellsToDischarge[ic] |= (1 << cell); //this cell will be discharged
+                    cellsAreBalancing = YES;
+                    balanceHysteresis = CELL_BALANCE_TO_WITHIN_COUNTS_TIGHT;
+                }
+            }
+            if (doOddNotEven) { cellsToDischargeEvenOdd = 0xAAAA & cellsToDischarge[ic]; }
+            else {              cellsToDischargeEvenOdd = 0x5555 & cellsToDischarge[ic]; }
+        }
 
+        debugUSB_setCellBalanceStatus(ic, cellsToDischargeEvenOdd, cellDischargeVoltageThreshold);
+        LTC68042configure_setBalanceResistors(ic, cellsToDischargeEvenOdd, LTC6804_DISCHARGE_TIMEOUT_02_SECONDS);
+    }
+    if (doOddNotEven) doOddNotEven = false;
+    else doOddNotEven = true;
+  #endif
 
     if (cellsAreBalancing == NO) { balanceHysteresis = CELL_BALANCE_TO_WITHIN_COUNTS_LOOSE; }
 }

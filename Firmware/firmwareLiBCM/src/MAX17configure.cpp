@@ -81,20 +81,30 @@ void LTC68042configure_writeConfigRegisters(uint8_t icAddress)
 //configure discharge resistor states on a single LTC6804 IC (CFGR4:5)
 void LTC68042configure_setBalanceResistors(uint8_t icAddress, uint16_t cellBitmap, uint8_t softwareTimeout)
 {
-  #ifndef BMS_TYPE_WGCLiBCM
     //Each bit in cellBitmap corresponds to a specific cell's DCCn discharge bit
     //Example: cellBitmap = 0b0000 1000 0000 0011 enables discharge on cells 12, 2, and 1 //LSB is cell01
     //Example: cellBitmap = 0b0000 1111 1111 1111 enables discharge on all cells
+  #ifndef BMS_TYPE_WGCLiBCM
     //See Table36
     configurationRegisterData[4] = (uint8_t)(cellBitmap); //LSByte
     configurationRegisterData[5] = ( ((uint8_t)(cellBitmap >> 8)) | softwareTimeout ); //MSByte's lower nibble
 
     MAX17843configure_writeConfigRegisters(icAddress);
   #else
-    //WGCToDo LTC68042configure_setBalanceResistors: not implimented yet
-    //called at KEY_OFF_UPDATE_PERIOD_ONE_SECOND_ms (1 sec) intervals
-    //softwareTimeout is LTC6804_DISCHARGE_TIMEOUT_02_SECONDS, which is 0! (as of 2/9/25)
-
+    //WGCToDo: softwareTimeout is LTC6804_DISCHARGE_TIMEOUT_02_SECONDS, which is 0! (as of 2/9/25)
+    // Set up watchdog timer for 2 sec
+    MAX1784Xcomms_writeDev843Reg(M873_TIMERCFG, icAddress, (BFN_GET(M873_TIMERCFG_bfCBPDIV, 1) | BFN_GET(M873_TIMERCFG_bfCBTIMER, 2)), MCONT_FULL_CHECKS);
+    //set cell switch bits
+    MAX1784Xcomms_writeDev843Reg(M873_BALSWEN, icAddress, BFN_GET(M873_BALSWEN_bfBALSWEN, cellBitmap), MCONT_FULL_CHECKS);
+    //WGCToDo: might be time for a shadow register...
+    if (cellBitmap) {
+      // then enable cell balance (clear DEVCFG1.BALSWDISABLE)
+      MAX1784Xcomms_writeDev843Reg(M873_DEVCFG1, icAddress, (~BITVALUE(M873_DEVCFG1_BALSWDISABLE)) & M873_DEVCFG1_INIT, MCONT_FULL_CHECKS);
+    }
+    else {
+      //disable cell balance (set DEVCFG1.BALSWDISABLE)
+      MAX1784Xcomms_writeDev843Reg(M873_DEVCFG1, icAddress, BITVALUE(M873_DEVCFG1_BALSWDISABLE) | M873_DEVCFG1_INIT, MCONT_FULL_CHECKS);
+    }
   #endif
 }
 

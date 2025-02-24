@@ -161,18 +161,18 @@ void validateAndStoreNextMAX17843(uint8_t chipAddress)
 
     uint8_t attemptCounter = 0;
     bool readOk = true;
-    uint16_t rawReadings[(2 + M873_TOTAL - M873_CELL1)];
+    uint16_t rawReadings[(1 + M873_TOTAL - M873_CELL1)];
     // rawReadings[0:11]  12 cell voltages
     // rawReadings[12]    Vblock
     // rawReadings[13]    thermistor 1
     // rawReadings[14]    thermistor 2
     // rawReadings[15]    total voltage
-    // rawReadings[16]    die temp
+    uint16_t rawDieTemp; // raw die temp
 
     do //repeats until PECs match (i.e. no data transmission errors)
     {
         readOk &= MAX1784Xcomms_readBlock843(M873_CELL1, (1 + M873_TOTAL - M873_CELL1), chipAddress, rawReadings, MCONT_RX_NO_CHECKS);
-        readOk &= MAX1784Xcomms_readDev843Reg(M873_DIAG, chipAddress, &(rawReadings[16]), MCONT_RX_NO_CHECKS);
+        readOk &= MAX1784Xcomms_readDev843Reg(M873_DIAG, chipAddress, &rawDieTemp, MCONT_RX_NO_CHECKS);
         if (attemptCounter++ > 1) { LTC68042result_errorCount_increment(); } //log each error
     } while ((!readOk) && (attemptCounter < MAX_READ_ATTEMPTS)); //retry if error
 
@@ -182,19 +182,15 @@ void validateAndStoreNextMAX17843(uint8_t chipAddress)
         for (int cell = 0; cell < CELLS_PER_IC; cell++) {
             cellVoltages_counts[chipAddress][cell] =  0;
         }
+        temperature_ModuleDie_setLatest_counts(chipAddress, 0);
     }
     else {
         for (int cell = 0; cell < CELLS_PER_IC; cell++) {
-            //WGCToDo: Doing volage scaling here (floating point multiplication)
-            // It would lead to faster execution to convert the rest of
-            // LiBCM cellVoltages_counts scale...
-            // Scale factor 5v/2^^16counts = 76.3uV/bit -> 100 uV/bit
-            //   => rawReadings * 5v/(2^^16counts)[V/bit] * 10000[100uV/V] = rawReadings * 0.762939
-            // Note: this is just the scale factor. MAX17843 only has
-            //  from 12 to 14 bits of resolution. LSBs are always 0
-            cellVoltages_counts[chipAddress][cell] =  (uint16_t)((float)rawReadings[cell] * 0.762939);
+            cellVoltages_counts[chipAddress][cell] =  rawReadings[cell];
         }
-        //WGCToDo: put thermistor, die temp values somewhere...
+        temperature_ModuleTherm_setLatest_counts(chipAddress, 0, rawReadings[13]);
+        temperature_ModuleTherm_setLatest_counts(chipAddress, 1, rawReadings[14]);
+        temperature_ModuleDie_setLatest_counts(chipAddress, rawDieTemp);
     }
 }
 
@@ -250,7 +246,7 @@ void processAllCellVoltages(void)
     {
         for (int cell=0; cell < CELLS_PER_IC; cell++) //actual LTC cell number: 'cell' + 1 (zero-indexed)
         {
-            uint16_t cellVoltageUnderTest = cellVoltages_counts[chip][cell];
+            uint16_t cellVoltageUnderTest =  (uint16_t)((float)cellVoltages_counts[chip][cell] * MAX17873_CONVERSION_TO_100uV_per_bit) ;
 
             //accumulate Vpack
             packVoltage_RAW += cellVoltageUnderTest;
@@ -267,12 +263,10 @@ void processAllCellVoltages(void)
             LTC68042result_specificCellVoltage_set(chip, cell, cellVoltageUnderTest);
         }
     }
-
     LTC68042result_packVoltage_set( (uint8_t)(packVoltage_RAW * 0.0001) );
 
     LTC68042result_loCellVoltage_set(loCellVoltage);
     LTC68042result_hiCellVoltage_set(hiCellVoltage);
-
     #ifdef BATTERY_TYPE_5AhG3
         //Now we need to determine which cell 19 voltage is correct (the actual measured value, or the current-adjusted one)
         //We do this by determining which voltage has the smallest magnitude from the max/min cell voltages (determined above).
@@ -327,8 +321,8 @@ bool LTC68042cell_nextVoltages(void)
     { //retrieve next CVR from LTC, then validate and store in cellVoltages_counts[][] array
 
         //round-robin state handlers
-        static uint8_t chipAddress = FIRST_IC_ADDR;
       #ifdef BMS_TYPE_LiBCM
+        static uint8_t chipAddress = FIRST_IC_ADDR;
         static char cellVoltageRegister = 'A'; //LTC68042 contains QTY4 CVRs (A/B/C/D)
 
         validateAndStoreNextCVR(chipAddress, cellVoltageRegister);
@@ -350,13 +344,14 @@ bool LTC68042cell_nextVoltages(void)
             }
         }
       #else
+        static uint8_t chipAddress = 0;
         // for MAX17843 BMS, do 12 cells at a time
         validateAndStoreNextMAX17843(chipAddress);
         if (++chipAddress >= (TOTAL_IC)) {
 digitalWrite(PIN_LATRIG, LOW); //WGCToDo: temporary debugging statement
             //just finished a battery module
             startMAX17843CellConversion();
-            chipAddress = FIRST_IC_ADDR; //reset to first LTC IC
+            chipAddress = 0; //reset to first NAX17843 IC
             presentState = LTC_STATE_PROCESS; //all cell voltages gathered.  Process data on next run.
         }
       #endif

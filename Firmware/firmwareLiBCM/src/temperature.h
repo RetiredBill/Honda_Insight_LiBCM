@@ -9,12 +9,19 @@
     int8_t temperature_exhaust_getLatest(void);
     int8_t temperature_gridCharger_getLatest(void);
     int8_t temperature_ambient_getLatest(void); //IMA bay temperature
+  #ifdef BMS_TYPE_WGCLiBCM
+    #define TEMPERATURE_MAX_CELL_BALANCE_DIE_TEMP_counts 31234 // 85 degC
+    uint16_t temperature_ModuleDie_getLatest_counts(uint8_t icAddress);
+    void     temperature_ModuleDie_setLatest_counts(uint8_t icAddress, uint16_t temp_counts);
+    uint16_t temperature_ModuleTherm_getLatest_counts(uint8_t icAddress, uint8_t thermistor);
+    void     temperature_ModuleTherm_setLatest_counts(uint8_t icAddress, uint8_t thermistor, uint8_t temp_counts);
+  #endif
 
     int8_t temperature_measureOneSensor_degC(uint8_t thermistorPin);
 
     void temperature_measureAndPrintAll(void);
     void temperature_printAll_latest(void);
-    
+
     int8_t temperature_coolBatteryAbove_C(void);
     int8_t temperature_heatBatteryBelow_C(void);
 
@@ -25,7 +32,7 @@
     #define TEMPERATURE_PACK_IN_THERMAL_RUNAWAY 70
 
     #define TEMPSENSORSTATE_OFF      1
-    #define TEMPSENSORSTATE_TURNON   2  
+    #define TEMPSENSORSTATE_TURNON   2
     #define TEMPSENSORSTATE_POWERUP  4
     #define TEMPSENSORSTATE_MEASURE  8
     #define TEMPSENSORSTATE_STAYON  16

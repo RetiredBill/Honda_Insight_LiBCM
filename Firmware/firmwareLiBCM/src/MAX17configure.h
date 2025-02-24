@@ -92,7 +92,7 @@
     #define M873_DEVCFG1_INIT_ALIVECNTEN          0b1     //bit 6
     #define M873_DEVCFG1_INIT_ADCTSTEN            0b0     //bit 5
     #define M873_DEVCFG1_INIT_SCANTODIS           0b0     //bit 4
-    #define M873_DEVCFG1_INIT_BALSWDISABLE        0b0     //bit 3
+    #define M873_DEVCFG1_INIT_BALSWDISABLE        0b1     //bit 3
     #define M873_DEVCFG1_INIT_NOPEC               0b0     //bit 2
     #define M873_DEVCFG1_INIT_ADDRUNLOCK          0b0     //bit 1
     #define M873_DEVCFG1_INIT_SPOR                0b0     //bit 0

@@ -711,7 +711,7 @@ bool MAX1784Xcomms_readDev843Reg(int regAddr, int devNum, uint16_t * resultBuff,
   messageValid &= MAX1784Xcomms_checkAliveCount(rxAliveCount, 1, __func__);
 
   // pick up data payload read back from transfer buffer
-  resultBuff[devNum] = (rxBuff[3] << 8) + rxBuff[2];
+  *resultBuff = (rxBuff[3] << 8) + rxBuff[2];
 
   return messageValid;
 }
