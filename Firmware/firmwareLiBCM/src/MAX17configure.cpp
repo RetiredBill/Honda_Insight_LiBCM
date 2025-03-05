@@ -111,7 +111,7 @@ void LTC68042configure_setBalanceResistors(uint8_t icAddress, uint16_t cellBitma
 /////////////////////////////////////////////////////////////////////////////////////////
 
 // Compared to BMS_TYPE_WGCLiBCM, LiBCM version of this is relatively fast (12 SPI bytes => 384us @ 32us/byte),
-//   whereas for BMS_TYPE_WGCLiBCMm, wakeup() alone takes ~4.3ms! Total is ~6.8ms
+//   whereas for BMS_TYPE_WGCLiBCM, wakeup() alone takes ~4.3ms! Total is ~6.8ms
 //Initialize BMS system to "fresh start" state
 void LTC68042configure_programVolatileDefaults(void)
 {
