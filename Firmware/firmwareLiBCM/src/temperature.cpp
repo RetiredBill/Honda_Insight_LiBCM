@@ -10,10 +10,13 @@
 
 int8_t tempBattery = ROOM_TEMP_DEGC;
 int8_t tempIntake  = ROOM_TEMP_DEGC;
-int8_t tempExhaust = ROOM_TEMP_DEGC;
 int8_t tempCharger = ROOM_TEMP_DEGC;
+#if defined(THERM_CONFIG_5AhG3) || defined(THERM_CONFIG_WGCLiBCM)
+// No explicit exhaust nor ambient temp sensors in FoMoCo case
+int8_t tempExhaust = ROOM_TEMP_DEGC;
 int8_t tempAmbient = ROOM_TEMP_DEGC;
-#ifdef BMS_TYPE_WGCLiBCM
+#endif
+#if defined(THERM_CONFIG_WGCLiBCM)
 uint16_t tempModuleDie_counts[TOTAL_IC];
 uint16_t tempModuleTherm_counts[TOTAL_IC][2];
 #endif
@@ -21,11 +24,14 @@ uint16_t tempModuleTherm_counts[TOTAL_IC][2];
 /////////////////////////////////////////////////////////////////////////////////////////
 
 int8_t temperature_battery_getLatest(void)    { return tempBattery; }
-int8_t temperature_intake_getLatest(void)     { return tempIntake;  } //GRN OEM temp sensor
-int8_t temperature_exhaust_getLatest(void)    { return tempExhaust; } //YEL OEM temp sensor
+int8_t temperature_intake_getLatest(void)     { return tempIntake;  } //GRN (5AhG3 case) or WHT (FoMoCo case) OEM temp sensor
 int8_t temperature_gridCharger_getLatest(void){ return tempCharger; } //BLU OEM temp sensor
+#if defined(THERM_CONFIG_5AhG3) || defined(THERM_CONFIG_WGCLiBCM)
+// No explicit exhaust nor ambient temp sensors in FoMoCo case
+int8_t temperature_exhaust_getLatest(void)    { return tempExhaust; } //YEL OEM temp sensor
 int8_t temperature_ambient_getLatest(void)    { return tempAmbient; } //WHT OEM temp sensor
-#ifdef BMS_TYPE_WGCLiBCM
+#endif
+#if defined(THERM_CONFIG_WGCLiBCM)
 uint16_t temperature_ModuleDie_getLatest_counts(uint8_t icAddress)                       { return tempModuleDie_counts[icAddress];               }
 void     temperature_ModuleDie_setLatest_counts(uint8_t icAddress, uint16_t temp_counts) {        tempModuleDie_counts[icAddress] = temp_counts; }
 uint16_t temperature_ModuleTherm_getLatest_counts(uint8_t icAddress, uint8_t thermistor)                      { return tempModuleTherm_counts[icAddress][thermistor];               }
@@ -37,16 +43,13 @@ void     temperature_ModuleTherm_setLatest_counts(uint8_t icAddress, uint8_t the
 //only call inside handler (to ensure sensors powered)
 void temperature_measureOEM(void)
 {
-    #ifdef BATTERY_TYPE_5AhG3
+    tempCharger = temperature_measureOneSensor_degC(PIN_TEMP_BLU);
+    #if  defined(THERM_CONFIG_5AhG3) || defined(THERM_CONFIG_WGCLiBCM)
         tempIntake  = temperature_measureOneSensor_degC(PIN_TEMP_GRN);
         tempExhaust = temperature_measureOneSensor_degC(PIN_TEMP_YEL);
-        tempCharger = temperature_measureOneSensor_degC(PIN_TEMP_BLU);
         tempAmbient = temperature_measureOneSensor_degC(PIN_TEMP_WHT);
-    #elif defined BATTERY_TYPE_47AhFoMoCo
+    #elif defined(THERM_CONFIG_LiBCM_FoMoCo)
         tempIntake  = temperature_measureOneSensor_degC(PIN_TEMP_WHT);
-        tempExhaust = temperature_measureOneSensor_degC(PIN_TEMP_GRN); //JTS2doNext: Actually top rear battery module
-        tempCharger = temperature_measureOneSensor_degC(PIN_TEMP_BLU);
-        tempAmbient = temperature_measureOneSensor_degC(PIN_TEMP_YEL); //JTS2doNext: Acutually top middle battery module
     #endif
 }
 
@@ -55,21 +58,24 @@ void temperature_measureOEM(void)
 //only call inside handler (to ensure sensors powered)
 //stores the most extreme battery temperature (from room temp) in tempBattery
 //LiBCM has QTY3 battery temperature sensors
-//JTS2doNext: Add FoMoCo hardware configuration
 void temperature_measureBattery(void)
 {
     int8_t batteryTemps[NUM_BATTERY_TEMP_SENSORS + 1] = {0}; //1-indexed ([1] = bay1 temp)
 
-    #ifdef BMS_TYPE_LiBCM
+  #if   defined(THERM_CONFIG_5AhG3) || defined(THERM_CONFIG_LiBCM_FoMoCo)
     batteryTemps[1] = temperature_measureOneSensor_degC(PIN_TEMP_BAY1);
     batteryTemps[2] = temperature_measureOneSensor_degC(PIN_TEMP_BAY2);
     batteryTemps[3] = temperature_measureOneSensor_degC(PIN_TEMP_BAY3);
-    #elif defined BMS_TYPE_WGCLiBCM
+    #if defined(THERM_CONFIG_LiBCM_FoMoCo)
+    batteryTemps[4] = temperature_measureOneSensor_degC(PIN_TEMP_GRN); //Top rear battery module
+    batteryTemps[5] = temperature_measureOneSensor_degC(PIN_TEMP_YEL); //Top middle battery module
+    #endif
+  #elif defined(THERM_CONFIG_WGCLiBCM)
     #ifndef WGC_BB1HW
     #error (Samsung SDI Battery module temp sensing not implimented yet)
     //WGCToDo: CRITICAL Add SDI module temp sensing
     #endif
-    #endif
+  #endif
 
     //stores hottest and coldest temp sensor value
     int8_t tempHi = TEMPERATURE_SENSOR_FAULT_LO; //highest measured temp is initially set to the  lowest possible temp
@@ -80,8 +86,34 @@ void temperature_measureBattery(void)
         if ((batteryTemps[ii] == TEMPERATURE_SENSOR_FAULT_HI) ||
             (batteryTemps[ii] == TEMPERATURE_SENSOR_FAULT_LO)  )
         {
+  #if   defined(THERM_CONFIG_5AhG3)
             Serial.print(F("\nCheck Batt Temp Sensor! Bay: "));
             Serial.print(String(ii,DEC));
+  #elif defined(THERM_CONFIG_LiBCM_FoMoCo)
+          Serial.print(F("\nCheck Batt Temp Sensor!"));
+          switch (ii) {
+            case 1:
+              Serial.print(F(" Middle tray rail, driver side")); //BAY1
+              break;
+            case 2:
+              Serial.print(F(" Bottom tray, middle")); //BAY2
+              break;
+            case 3:
+              Serial.print(F(" Middle tray rail, passenger side")); //BAY3
+              break;
+            case 4:
+              Serial.print(F(" Top rear battery module"));
+              break;
+            case 5:
+              Serial.print(F(" Top middle battery module"));
+              break;
+          }
+  #elif defined(THERM_CONFIG_WGCLiBCM)
+    #ifndef WGC_BB1HW
+    #error (Samsung SDI Battery module temp sensing not implimented yet)
+    //WGCToDo: CRITICAL Add SDI module temp sensing
+    #endif
+  #endif
         }
         else
         {
@@ -116,38 +148,59 @@ void temperature_printAll_latest(void)
     Serial.print(temperature_gridCharger_getLatest());
     Serial.print(F("\nIn: "));
     Serial.print(temperature_intake_getLatest());
+  #if defined(THERM_CONFIG_5AhG3) || defined(THERM_CONFIG_WGCLiBCM)
     Serial.print(F("\nAmb: "));
     Serial.print(temperature_ambient_getLatest());
     Serial.print(F("\nOut: "));
     Serial.print(temperature_exhaust_getLatest());
+  #endif
     Serial.print(F("\nBatt: "));
     Serial.print(temperature_battery_getLatest());
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//JTS2doNext: add separate case for FoMoCo
 void temperature_measureAndPrintAll(void)
 {
     if (gpio_getPinState(PIN_TEMP_EN) == PIN_OUTPUT_HIGH)
     {
         Serial.print(F("\nTemperatures(C):"));
-        Serial.print(F("\nBLU: "));
+        Serial.print(F("\nBLU (Charger): "));
         Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_BLU));
-        Serial.print(F("\nGRN: "));
+      #if   defined(THERM_CONFIG_5AhG3) || defined(THERM_CONFIG_WGCLiBCM)
+        Serial.print(F("\nGRN (Intake): "));
         Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_GRN));
-        Serial.print(F("\nWHT: "));
+        Serial.print(F("\nWHT (Ambient): "));
         Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_WHT));
-        Serial.print(F("\nYEL: "));
+        Serial.print(F("\nYEL (Exhaust): "));
         Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_YEL));
-        #ifdef BMS_TYPE_LiBCM
+      #endif
+      #if   defined(THERM_CONFIG_5AhG3)
         Serial.print(F("\nBAY1: "));
         Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_BAY1));
         Serial.print(F("\nBAY2: "));
         Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_BAY2));
         Serial.print(F("\nBAY3: "));
         Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_BAY3));
+      #elif defined(THERM_CONFIG_LiBCM_FoMoCo)
+        Serial.print(F("\nGRN (Top rear battery module): "));
+        Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_GRN));
+        Serial.print(F("\nWHT (Intake): "));
+        Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_WHT));
+        Serial.print(F("\nYEL (Top middle battery module): "));
+        Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_YEL));
+        Serial.print(F("\nMiddle tray rail, driver side: ")); //BAY1
+        Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_BAY1));
+        Serial.print(F("\nBottom tray, middle: ")); //BAY2
+        Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_BAY2));
+        Serial.print(F("\nMiddle tray rail, passenger side: ")); //BAY3
+        Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_BAY3));
+      #else
+        #ifndef WGC_BB1HW
+        #error (Samsung SDI Battery module temp sensing not implimented yet)
+        //WGCToDo: CRITICAL Add SDI module temp sensing
         #endif
+      #endif
     }
     else
     {

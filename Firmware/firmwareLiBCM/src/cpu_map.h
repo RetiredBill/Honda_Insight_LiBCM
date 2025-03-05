@@ -21,8 +21,8 @@
         #define PIN_BATTCURRENT A0
         #define PIN_USER_SW     A1
         #define PIN_VPIN_IN     A2
-        #define PIN_TEMP_YEL    A3
-        #define PIN_TEMP_GRN    A4
+        #define PIN_TEMP_YEL    A3 // 5AhG3: Exhaust, FoMoCo Top middle battery module
+        #define PIN_TEMP_GRN    A4 // 5AhG3: Intake, FoMoCo Top rear battery module
         #define PIN_TEMP_WHT    A5
         #define PIN_TEMP_BLU    A6
         #define PIN_FANOEM_LOW  A7
