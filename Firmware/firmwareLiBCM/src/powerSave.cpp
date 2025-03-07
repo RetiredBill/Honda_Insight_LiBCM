@@ -192,7 +192,8 @@ void powerSave_turnOffIfAllowed(void)
     #ifdef POWEROFF_DELAY_AFTER_KEYOFF_DAYS
         uint32_t timeSinceLatestKeyOff_ms = millis() - time_latestKeyOff_ms_get();
 
-        if ((gpio_isGridChargerPluggedInNow() == NO)                                                            &&
+        if ((cellBalance_areCellsBalancing()  == NO) /* LiBCM must stay on for safety */                        &&
+            (gpio_isGridChargerPluggedInNow() == NO) /* LiBCM must stay on for safety */                        &&
             (time_sinceLatestGridChargerUnplug_get_ms() > PERIOD_TO_DISABLE_TURNOFF_AFTER_CHARGER_UNPLUGGED_ms) &&
             (timeSinceLatestKeyOff_ms > (POWEROFF_DELAY_AFTER_KEYOFF_DAYS * MILLISECONDS_PER_DAY))               )
         {
