@@ -246,7 +246,7 @@ void processAllCellVoltages(void)
     {
         for (int cell=0; cell < CELLS_PER_IC; cell++) //actual LTC cell number: 'cell' + 1 (zero-indexed)
         {
-            uint16_t cellVoltageUnderTest =  (uint16_t)((float)cellVoltages_counts[chip][cell] * MAX17873_CONVERSION_TO_100uV_per_bit) ;
+            uint16_t cellVoltageUnderTest = (uint16_t)((float)cellVoltages_counts[chip][cell] * MAX17873_CONVERSION_TO_100uV_per_bit) ;
 
             //accumulate Vpack
             packVoltage_RAW += cellVoltageUnderTest;

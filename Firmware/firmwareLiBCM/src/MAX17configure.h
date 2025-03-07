@@ -319,6 +319,25 @@
       }
       */
 
+    // testDischargeFETs defines
+    #define TESTDISCHASRGE_EvenCellsBitMap 0b0000010101010101
+    #define TESTDISCHASRGE_OddCellsBitMap  0b0000101010101010
+    #define TESTDISCHASRGE_DeltaVSep_THRESHOLD_counts   80
+    #define TESTDISCHASRGE_DISCHARGE_TESTLIMIT_counts   50
+    #define TESTDISCHASRGE_NONDISCHRGE_TESTLIMIT_counts 50
+    #define TESTDISCHASRGE_TIMELIMIT_minutes  10
+    #define TESTDISCHASRGE_TIMELIMIT_ms       (TESTDISCHASRGE_TIMELIMIT_minutes * 60 * 1000L)
+
+    // testDischargeFETs state machine states
+    #define TESTDISCHASRGESTATE_TURNON         1
+    #define TESTDISCHASRGESTATE_WAITING_EVEN   2
+    #define TESTDISCHASRGESTATE_TESTING_EVEN   3
+    #define TESTDISCHASRGESTATE_DONE_EVEN      4
+    #define TESTDISCHASRGESTATE_WAITING_ODD    5
+    #define TESTDISCHASRGESTATE_TESTING_ODD    6
+    #define TESTDISCHASRGESTATE_DONE           7
+    #define TESTDISCHASRGESTATE_DISABLED       8
+
     //Exteral (public) functions (aka LTC68042 API)
     void LTC68042configure_initialize(void);
     void LTC68042configure_handleKeyStateChange(void);
@@ -332,5 +351,7 @@
     void LTC68042configure_pulseChipSelectLow(uint16_t lowPulsePeriod_us);
     void MAX17841configure_enableMAX17841(void);
     void MAX17841configure_disableMAX17841(void);
+    void LTC68042configure_enabletestDischargeFETs(void);
+    uint8_t LTC68042configure_testDischargeFETs(void);
 
 #endif

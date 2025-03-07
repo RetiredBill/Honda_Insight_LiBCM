@@ -392,6 +392,318 @@ bool LTC68042configure_wakeup(void)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
+static uint8_t testDischargeState = TESTDISCHASRGESTATE_DISABLED; //state machine
+static uint16_t cellVoltagesTest_counts[TOTAL_IC][CELLS_PER_IC];
+static uint32_t latestStateTimestamp_ms = 0;
+static int16_t  dischargingAverageDeltaV_counts = 0;
+static int16_t  nonDischargingAverageDeltaV_counts = 0;
+static uint16_t testDischargeFETs_passedDischargeBitmap[TOTAL_IC] = {0};
+static uint16_t testDischargeFETs_passedNonDischargeBitmap[TOTAL_IC] = {0};
+
+void LTC68042configure_enabletestDischargeFETs(void) {testDischargeState = TESTDISCHASRGESTATE_TURNON;}
+
+///////// LTC68042configure_testDischargeFETs helper functions
+//helper function to set up a odd or even test
+void testDischargeHelperStart(uint16_t cellDischargeBitmap)
+{
+    //get starting accurate cell voltages
+    LTC68042cell_acquireAllCellVoltages();
+
+    //save the results away for later reference
+    for (uint8_t ic=0; ic<TOTAL_IC; ic++)
+    {
+        for (uint8_t cellNumber = 0; cellNumber<CELLS_PER_IC; cellNumber++)
+        {
+            cellVoltagesTest_counts[ic][cellNumber] = LTC68042result_specificCellVoltage_get(ic, cellNumber);
+        }
+    }
+
+    //turn on all odd or even cell balance circuits only
+    for (uint8_t ic=0; ic<TOTAL_IC; ic++)
+    {
+        LTC68042configure_setBalanceResistors(
+           FIRST_IC_ADDR + ic,
+           cellDischargeBitmap,
+           LTC6804_DISCHARGE_TIMEOUT_02_SECONDS);
+        debugUSB_setCellBalanceStatus(ic, cellDischargeBitmap, 0); //WGCToDo: change arg 3 (cellDischargeVoltageThreshold) to something useful?
+    }
+
+    //note time
+    latestStateTimestamp_ms = millis();
+}
+
+//helper function for waiting for odd/even delta voltage separation
+void testDischargeHelperWaiting(int16_t * evenAverageDeltaV_counts, int16_t * oddAverageDeltaV_counts)
+{
+    //we're waiting for a detectable voltage difference to arrise between
+    //discharging cells and non-discharging cells
+
+    LTC68042cell_acquireAllCellVoltages();
+
+    //calculate average delta for both even and not-odd cells
+    *evenAverageDeltaV_counts = 0;
+    *oddAverageDeltaV_counts  = 0;
+    for (uint8_t ic=0; ic<TOTAL_IC; ic++)
+    {
+        for (uint8_t cellNumber = 0; cellNumber<CELLS_PER_IC; cellNumber += 2)
+        {
+            //even cells
+            *evenAverageDeltaV_counts +=
+              (   LTC68042result_specificCellVoltage_get(ic, cellNumber    )
+                - cellVoltagesTest_counts[ic][cellNumber    ]
+              );
+            //odd cells
+            *oddAverageDeltaV_counts +=
+              (   LTC68042result_specificCellVoltage_get(ic, cellNumber + 1)
+                - cellVoltagesTest_counts[ic][cellNumber + 1]
+              );
+        }
+    }
+    *evenAverageDeltaV_counts /= CELLS_PER_IC;
+    *oddAverageDeltaV_counts  /= CELLS_PER_IC;
+}
+
+//helper function for performing odd/even test
+bool testDischargeHelperTesting(uint16_t cellDischargeBitmap)
+{
+   //sufficient delta separation has occurred:
+    //  note which discharging cells are actually discharging
+    //  and also check if any not-discharging cells are unexpectadly discharging
+
+    bool allICsPassed = true;
+
+    for (uint8_t ic=0; ic<TOTAL_IC; ic++)
+    {
+        // set loop start based on doing even or odd
+        uint8_t cellNumber = (cellDischargeBitmap & 1) ? 0 : 1;
+        for ( ; cellNumber<CELLS_PER_IC; cellNumber += 2)
+        {
+            uint16_t cellBit = (1 << cellNumber);
+            //check if discharging cell not yet passed
+            if ( ! (testDischargeFETs_passedDischargeBitmap[ic] & cellBit))
+            {
+                //then check if discharging cell now passes
+                if (  TESTDISCHASRGE_DISCHARGE_TESTLIMIT_counts <
+                      (LTC68042result_specificCellVoltage_get(ic, cellNumber)
+                       - cellVoltagesTest_counts[ic][cellNumber]
+                       - nonDischargingAverageDeltaV_counts
+                      )
+                   )
+                {
+                    //then this discharging cell has passed
+                    testDischargeFETs_passedDischargeBitmap[ic] |= cellBit;
+                }
+            }
+        }
+        //turn off cell balance circuit for passed cells
+        uint16_t newBitMap = (~testDischargeFETs_passedDischargeBitmap[ic]) & cellDischargeBitmap;
+        LTC68042configure_setBalanceResistors(
+          FIRST_IC_ADDR + ic,
+          newBitMap,
+          LTC6804_DISCHARGE_TIMEOUT_02_SECONDS);
+        debugUSB_setCellBalanceStatus(ic, newBitMap, 1); //WGCToDo: change arg 3 (cellDischargeVoltageThreshold) to something useful?
+
+        //check if any cells being discharged don't pass
+        if (newBitMap)
+        {
+            //test is not done, we'll continue waiting for laggards
+            allICsPassed = false;
+        }
+    }
+
+    //if test is done or time has expired, check if any non-discharge cells have actually dischaged
+    if (    allICsPassed
+         || (TESTDISCHASRGE_TIMELIMIT_ms < (millis() - latestStateTimestamp_ms))
+       )
+    {
+        for (uint8_t ic=0; ic<TOTAL_IC; ic++)
+        {
+            // set loop start based on doing odd or even
+            uint8_t cellNumber = (cellDischargeBitmap & 1) ? 1 : 0;
+            for (; cellNumber<CELLS_PER_IC; cellNumber += 2)
+            {
+                //non-discharging cell passed?
+                int16_t nonDischargeResult_counts =
+                     LTC68042result_specificCellVoltage_get(ic, cellNumber)
+                   - cellVoltagesTest_counts[ic][cellNumber]
+                   - nonDischargingAverageDeltaV_counts;
+                if (    ( TESTDISCHASRGE_NONDISCHRGE_TESTLIMIT_counts > nonDischargeResult_counts)
+                     && (-TESTDISCHASRGE_NONDISCHRGE_TESTLIMIT_counts < nonDischargeResult_counts)
+                   )
+                {
+                    //then this non-discharging cell has passed
+                    testDischargeFETs_passedNonDischargeBitmap[ic] |= (1 << cellNumber);
+                }
+            }
+        }
+    }
+
+    return allICsPassed;
+}
+
+// Test the cell balance circuit on each cell
+//   Ignition must be off, grid charger must be off (for this implimentation)
+//Required conditions to allow running this test (maybe all decided in calling function...)
+//  cell voltages are above a minimum and below maximum allowable done by isBalancingAllowed()
+//  key-off (already handled by invocation via key_handleKeyEvent_off())
+//WGCToDo: not charging (or turn off charger and postpone charging? or allow charging)
+//  adequate SoC done by isBalancingAllowed()
+//  acceptable temperature done by isBalancingAllowed()
+//  Enough time elapsed since key-off/last regen/assist use to have
+//    otherwise stable cell voltages? No, algorithm tracks drift
+//WGCToDo: do we need a "wait for settled cell voltages" state? No, tracking drift, unless that doesn't work...
+uint8_t LTC68042configure_testDischargeFETs(void)
+{
+
+if (testDischargeState != TESTDISCHASRGESTATE_DISABLED) { //WGCToDo: debugging only
+    uint32_t now_ms = millis();
+    Serial.print(F("\n+CellBalBIST state: "));
+    Serial.print(testDischargeState);
+    Serial.print(F(", now (ms): "));
+    Serial.print(now_ms);
+    Serial.print(F(", elapsed time (ms): "));
+    Serial.print(now_ms - latestStateTimestamp_ms);
+    Serial.print(F(", limit (ms): "));
+    Serial.print(TESTDISCHASRGE_TIMELIMIT_ms);
+    Serial.print(F(", non-discharge delta: 0x"));
+    Serial.print(nonDischargingAverageDeltaV_counts, HEX);
+    Serial.print(F(", discharge delta: 0x"));
+    Serial.println(dischargingAverageDeltaV_counts, HEX);
+}
+    if (testDischargeState == TESTDISCHASRGESTATE_TURNON)
+    {
+        //tell the world that cells are balancing
+        cellBalance_set_cellsAreBalancing(YES);
+
+        //start with even cells
+        testDischargeHelperStart(TESTDISCHASRGE_EvenCellsBitMap);
+
+        testDischargeState = TESTDISCHASRGESTATE_WAITING_EVEN; // next state
+    }
+
+    else if (testDischargeState == TESTDISCHASRGESTATE_WAITING_EVEN)
+    {
+        //testDischargeHelperWaiting(even, odd)
+        testDischargeHelperWaiting(&dischargingAverageDeltaV_counts, &nonDischargingAverageDeltaV_counts);
+
+        //check that these 2 population's average deltas have sufficiently separated, otherwise wait
+        if (TESTDISCHASRGE_DeltaVSep_THRESHOLD_counts < (nonDischargingAverageDeltaV_counts - dischargingAverageDeltaV_counts))
+        {
+            //then we can move on
+            testDischargeState = TESTDISCHASRGESTATE_TESTING_EVEN; // next state
+        }
+        else if (TESTDISCHASRGE_TIMELIMIT_ms < (millis() - latestStateTimestamp_ms))
+        {
+            //then time has run out! Bad test design
+            // disable all cell balance circuits
+            disableDischargeResistors();
+            //let the world know of my failure...
+            Serial.print(F("Cell Balance Circuit test aborting: timout waiting for even cell delta separation (non-discharge delta: "));
+            Serial.print(nonDischargingAverageDeltaV_counts);
+            Serial.print(F(" discharge delta: "));
+            Serial.println(dischargingAverageDeltaV_counts);
+            testDischargeState = TESTDISCHASRGESTATE_DONE; // next state
+        }
+    }
+
+    else if (testDischargeState == TESTDISCHASRGESTATE_TESTING_EVEN)
+    {
+        if (testDischargeHelperTesting(TESTDISCHASRGE_EvenCellsBitMap))
+        {
+            //then test wait is over
+            testDischargeState = TESTDISCHASRGESTATE_DONE_EVEN; // next state
+        }
+        else
+        {
+          //make another set of measurements
+          LTC68042cell_acquireAllCellVoltages();
+          //and continue waiting for laggards, or time expires
+        }
+    }
+
+    else if (testDischargeState == TESTDISCHASRGESTATE_DONE_EVEN)
+    {
+        //now do odd cells
+        testDischargeHelperStart(TESTDISCHASRGE_OddCellsBitMap);
+
+        testDischargeState = TESTDISCHASRGESTATE_WAITING_ODD; // next state
+    }
+
+    else if (testDischargeState == TESTDISCHASRGESTATE_WAITING_ODD)
+    {
+        //testDischargeHelperWaiting(even, odd)
+        testDischargeHelperWaiting(&nonDischargingAverageDeltaV_counts, &dischargingAverageDeltaV_counts);
+
+        //check that these 2 population's average deltas have sufficiently separated, otherwise wait
+        if (TESTDISCHASRGE_DeltaVSep_THRESHOLD_counts < (nonDischargingAverageDeltaV_counts - dischargingAverageDeltaV_counts))
+        {
+            //then we can move on
+            testDischargeState = TESTDISCHASRGESTATE_TESTING_ODD; // next state
+        }
+        else if (TESTDISCHASRGE_TIMELIMIT_ms < (millis() - latestStateTimestamp_ms))
+        {
+            //then time has run out! Bad test design
+            // disable all cell balance circuits
+            disableDischargeResistors();
+            //let the world know of my failure...
+            Serial.print(F("Cell Balance Circuit test aborting: timout waiting for odd cell delta separation (non-discharge delta: "));
+            Serial.print(nonDischargingAverageDeltaV_counts);
+            Serial.print(F(" discharge delta: "));
+            Serial.println(dischargingAverageDeltaV_counts);
+            testDischargeState = TESTDISCHASRGESTATE_DONE; // next state
+        }
+    }
+
+    else if (testDischargeState == TESTDISCHASRGESTATE_TESTING_ODD)
+    {
+        if (testDischargeHelperTesting(TESTDISCHASRGE_OddCellsBitMap))
+        {
+            //then test wait is over
+            testDischargeState = TESTDISCHASRGESTATE_DONE; // next state
+        }
+        else
+        {
+          //make another set of measurements
+          LTC68042cell_acquireAllCellVoltages();
+          //and continue waiting for laggards, or time expires
+        }
+    }
+
+    else if (testDischargeState == TESTDISCHASRGESTATE_DONE)
+    {
+        //turn off all cell discharge circuits
+        disableDischargeResistors();
+
+        //tell the world that cells are no longer balancing
+        cellBalance_set_cellsAreBalancing(NO);
+
+        //report results
+        Serial.print(F("Cells that passed discharge test: "));
+        for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
+        {
+            Serial.print(String(testDischargeFETs_passedDischargeBitmap[ic], HEX));
+            Serial.print(',');
+        }
+
+        Serial.print(F("\nCells that passed non-discharge test: "));
+        for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
+        {
+            Serial.print(String(testDischargeFETs_passedNonDischargeBitmap[ic], HEX));
+            Serial.print(',');
+        }
+        Serial.println("");
+
+        testDischargeState = TESTDISCHASRGESTATE_DISABLED; // next state
+    }
+
+    //else if (testDischargeState == TESTDISCHASRGESTATE_DISABLED) { ; } //nothing to do
+    //else                                                         { ; } //nothing to do
+
+    return testDischargeState;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+
 //WGCToDo LTC68042configure_calcPEC15: This function has more affinity with MAX1784Xcomms.
 // For MAX1784x, PEC is actually a CRC8, not CRC15
 uint16_t LTC68042configure_calcPEC15(uint8_t len, //data array length
