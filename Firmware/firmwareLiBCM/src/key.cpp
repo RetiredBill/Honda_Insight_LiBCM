@@ -27,6 +27,8 @@ void key_handleKeyEvent_off(void)
     LTC68042configure_handleKeyStateChange();
     vPackSpoof_handleKeyOFF();
     //JTS2doLater: Add built-in test suite, including VREF, VCELL, Balancing, temp verify (batt and OEM), etc.
+    //WGCToDoNow: deal appropriately with failure of LTC68042configure_basicConfidenceTest()
+    LTC68042configure_basicConfidenceTest();
     LTC68042configure_enabletestDischargeFETs();
     eeprom_keyOffCheckForExpiredFirmware();
     // For BMS_TYPE_WGCLiBCM, this is also (of necesity) done when LiBCM wakes up

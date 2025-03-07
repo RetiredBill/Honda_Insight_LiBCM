@@ -124,7 +124,7 @@ void LTC68042configure_programVolatileDefaults(void)
   // If we are executing after a POR,
   //   then the reset is done (and we'll verify this),
   // else do the POR reset here
-  //WGCToDoNow: Options to initialize 871:
+  //WGCToDo: Options to initialize 871:
   //  Pulse SHDNL (inducing POR), then write 4 selected registers (2 SPI bytes each), and 1 command (1 SPI byte)
   //    1uSec tau on SHDNl line, so low time should be ... This actually requires significant delay, so:
   //  Just write a 7 byte block (2 SPI bytes), and 1 command (1 SPI byte)
@@ -397,12 +397,21 @@ static uint16_t cellVoltagesTest_counts[TOTAL_IC][CELLS_PER_IC];
 static uint32_t latestStateTimestamp_ms = 0;
 static int16_t  dischargingAverageDeltaV_counts = 0;
 static int16_t  nonDischargingAverageDeltaV_counts = 0;
-static uint16_t testDischargeFETs_passedDischargeBitmap[TOTAL_IC] = {0};
-static uint16_t testDischargeFETs_passedNonDischargeBitmap[TOTAL_IC] = {0};
+static uint16_t test1_cellStatusBitmap[TOTAL_IC] = {0};
+static uint16_t test2_cellStatusBitmap[TOTAL_IC] = {0};
 
 void LTC68042configure_enabletestDischargeFETs(void) {testDischargeState = TESTDISCHASRGESTATE_TURNON;}
 
 ///////// LTC68042configure_testDischargeFETs helper functions
+void testClearCellTestFlags(void)
+{
+    for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
+    {
+        test1_cellStatusBitmap[ic] = 0;
+        test2_cellStatusBitmap[ic] = 0;
+    }
+}
+
 //helper function to set up a odd or even test
 void testDischargeHelperStart(uint16_t cellDischargeBitmap)
 {
@@ -410,16 +419,16 @@ void testDischargeHelperStart(uint16_t cellDischargeBitmap)
     LTC68042cell_acquireAllCellVoltages();
 
     //save the results away for later reference
-    for (uint8_t ic=0; ic<TOTAL_IC; ic++)
+    for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
     {
-        for (uint8_t cellNumber = 0; cellNumber<CELLS_PER_IC; cellNumber++)
+        for (uint8_t cellNumber = 0; cellNumber < CELLS_PER_IC; cellNumber++)
         {
             cellVoltagesTest_counts[ic][cellNumber] = LTC68042result_specificCellVoltage_get(ic, cellNumber);
         }
     }
 
     //turn on all odd or even cell balance circuits only
-    for (uint8_t ic=0; ic<TOTAL_IC; ic++)
+    for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
     {
         LTC68042configure_setBalanceResistors(
            FIRST_IC_ADDR + ic,
@@ -443,9 +452,9 @@ void testDischargeHelperWaiting(int16_t * evenAverageDeltaV_counts, int16_t * od
     //calculate average delta for both even and not-odd cells
     *evenAverageDeltaV_counts = 0;
     *oddAverageDeltaV_counts  = 0;
-    for (uint8_t ic=0; ic<TOTAL_IC; ic++)
+    for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
     {
-        for (uint8_t cellNumber = 0; cellNumber<CELLS_PER_IC; cellNumber += 2)
+        for (uint8_t cellNumber = 0; cellNumber < CELLS_PER_IC; cellNumber += 2)
         {
             //even cells
             *evenAverageDeltaV_counts +=
@@ -472,15 +481,15 @@ bool testDischargeHelperTesting(uint16_t cellDischargeBitmap)
 
     bool allICsPassed = true;
 
-    for (uint8_t ic=0; ic<TOTAL_IC; ic++)
+    for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
     {
         // set loop start based on doing even or odd
         uint8_t cellNumber = (cellDischargeBitmap & 1) ? 0 : 1;
-        for ( ; cellNumber<CELLS_PER_IC; cellNumber += 2)
+        for ( ; cellNumber < CELLS_PER_IC; cellNumber += 2)
         {
             uint16_t cellBit = (1 << cellNumber);
             //check if discharging cell not yet passed
-            if ( ! (testDischargeFETs_passedDischargeBitmap[ic] & cellBit))
+            if ( ! (test1_cellStatusBitmap[ic] & cellBit))
             {
                 //then check if discharging cell now passes
                 if (  TESTDISCHASRGE_DISCHARGE_TESTLIMIT_counts <
@@ -491,12 +500,12 @@ bool testDischargeHelperTesting(uint16_t cellDischargeBitmap)
                    )
                 {
                     //then this discharging cell has passed
-                    testDischargeFETs_passedDischargeBitmap[ic] |= cellBit;
+                    test1_cellStatusBitmap[ic] |= cellBit;
                 }
             }
         }
         //turn off cell balance circuit for passed cells
-        uint16_t newBitMap = (~testDischargeFETs_passedDischargeBitmap[ic]) & cellDischargeBitmap;
+        uint16_t newBitMap = (~test1_cellStatusBitmap[ic]) & cellDischargeBitmap;
         LTC68042configure_setBalanceResistors(
           FIRST_IC_ADDR + ic,
           newBitMap,
@@ -516,11 +525,11 @@ bool testDischargeHelperTesting(uint16_t cellDischargeBitmap)
          || (TESTDISCHASRGE_TIMELIMIT_ms < (millis() - latestStateTimestamp_ms))
        )
     {
-        for (uint8_t ic=0; ic<TOTAL_IC; ic++)
+        for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
         {
             // set loop start based on doing odd or even
             uint8_t cellNumber = (cellDischargeBitmap & 1) ? 1 : 0;
-            for (; cellNumber<CELLS_PER_IC; cellNumber += 2)
+            for (; cellNumber < CELLS_PER_IC; cellNumber += 2)
             {
                 //non-discharging cell passed?
                 int16_t nonDischargeResult_counts =
@@ -532,7 +541,7 @@ bool testDischargeHelperTesting(uint16_t cellDischargeBitmap)
                    )
                 {
                     //then this non-discharging cell has passed
-                    testDischargeFETs_passedNonDischargeBitmap[ic] |= (1 << cellNumber);
+                    test2_cellStatusBitmap[ic] |= (1 << cellNumber);
                 }
             }
         }
@@ -540,6 +549,89 @@ bool testDischargeHelperTesting(uint16_t cellDischargeBitmap)
 
     return allICsPassed;
 }
+
+/////////////////////////////////////////////////////////////////////////////////////////
+
+//Run quick basic confidence test on BMS circuits
+bool LTC68042configure_basicConfidenceTest(void)
+{
+    bool didTestFail = false;
+
+    //note test start time
+    uint32_t testStartTimestamp_ms = millis();
+
+    testClearCellTestFlags();
+
+    //WGCToDoNow: first check that cell voltages are sane? At least verify LTC68042result_errorCount_get()
+
+    //tell the world that cells are balancing
+    cellBalance_set_cellsAreBalancing(YES); //WGCToDo: this is lazy code reuse. cellBalance_set_cellsAreBalancing() does a little more than needed here...
+
+    //start with even cells
+    testDischargeHelperStart(TESTDISCHASRGE_EvenCellsBitMap);
+
+    //note any cell voltages that are near 0 or near double
+    for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
+    {
+        for (uint8_t cellNumber = 0 ; cellNumber < CELLS_PER_IC; cellNumber++)
+        {
+            if (    (CELL_VMAX_REGEN       < cellVoltagesTest_counts[ic][cellNumber])
+                 || (CELL_VMIN_GRIDCHARGER > cellVoltagesTest_counts[ic][cellNumber])
+               )
+            {
+                //then this cell has failed
+                test1_cellStatusBitmap[ic] |= (1 << cellNumber);
+            }
+        }
+        if (test1_cellStatusBitmap[ic]) { didTestFail = true; }
+    }
+
+     //now do odd cells
+    testDischargeHelperStart(TESTDISCHASRGE_OddCellsBitMap);
+
+    //note any cell voltages that are near 0 or near double
+    for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
+    {
+        for (uint8_t cellNumber = 0 ; cellNumber < CELLS_PER_IC; cellNumber++)
+        {
+            if (    (CELL_VMAX_REGEN       < cellVoltagesTest_counts[ic][cellNumber])
+                 || (CELL_VMIN_GRIDCHARGER > cellVoltagesTest_counts[ic][cellNumber])
+               )
+            {
+                //then this cell has failed
+                test2_cellStatusBitmap[ic] |= (1 << cellNumber);
+            }
+        }
+        if (test2_cellStatusBitmap[ic]) { didTestFail = true; }
+    }
+
+    //turn off all cell discharge circuits
+    disableDischargeResistors();
+
+    //tell the world that cells are no longer balancing
+    cellBalance_set_cellsAreBalancing(NO);
+
+    //WGCToDoNow: create common language failure report
+    uint32_t now_ms = millis();
+    Serial.println(F("\n+Basic BMC circuit test"));
+    Serial.print(F("   Failed cell bitmaps for EVEN cell test: (0x) "));
+    for (uint8_t ic = 0; ic < TOTAL_IC; ic++) {
+        Serial.print(test1_cellStatusBitmap[ic], HEX);
+        Serial.print(F(", "));
+    }
+    Serial.print(F("\n   Failed cell bitmaps for ODD  cell test: (0x) "));
+    for (uint8_t ic = 0; ic < TOTAL_IC; ic++) {
+        Serial.print(test2_cellStatusBitmap[ic], HEX);
+        Serial.print(F(", "));
+    }
+    Serial.print(F("\n   Elapsed test time (ms): "));
+    Serial.print(now_ms - testStartTimestamp_ms);
+    Serial.println("");
+
+    return didTestFail;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
 
 // Test the cell balance circuit on each cell
 //   Ignition must be off, grid charger must be off (for this implimentation)
@@ -570,8 +662,14 @@ if (testDischargeState != TESTDISCHASRGESTATE_DISABLED) { //WGCToDo: debugging o
     Serial.print(F(", discharge delta: 0x"));
     Serial.println(dischargingAverageDeltaV_counts, HEX);
 }
+
+    //note test start time
+    static uint32_t testStartTimestamp_ms = millis();
+
     if (testDischargeState == TESTDISCHASRGESTATE_TURNON)
     {
+        testClearCellTestFlags();
+
         //tell the world that cells are balancing
         cellBalance_set_cellsAreBalancing(YES);
 
@@ -677,20 +775,25 @@ if (testDischargeState != TESTDISCHASRGESTATE_DISABLED) { //WGCToDo: debugging o
         //tell the world that cells are no longer balancing
         cellBalance_set_cellsAreBalancing(NO);
 
+        uint32_t now_ms = millis();
+
         //report results
         Serial.print(F("Cells that passed discharge test: "));
         for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
         {
-            Serial.print(String(testDischargeFETs_passedDischargeBitmap[ic], HEX));
+            Serial.print(String(test1_cellStatusBitmap[ic], HEX));
             Serial.print(',');
         }
 
         Serial.print(F("\nCells that passed non-discharge test: "));
         for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
         {
-            Serial.print(String(testDischargeFETs_passedNonDischargeBitmap[ic], HEX));
+            Serial.print(String(test2_cellStatusBitmap[ic], HEX));
             Serial.print(',');
         }
+
+        Serial.print(F("\n   Elapsed test time (ms): "));
+        Serial.print(now_ms - testStartTimestamp_ms);
         Serial.println("");
 
         testDischargeState = TESTDISCHASRGESTATE_DISABLED; // next state

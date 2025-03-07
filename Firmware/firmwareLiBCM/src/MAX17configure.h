@@ -353,5 +353,6 @@
     void MAX17841configure_disableMAX17841(void);
     void LTC68042configure_enabletestDischargeFETs(void);
     uint8_t LTC68042configure_testDischargeFETs(void);
+    bool LTC68042configure_basicConfidenceTest(void);
 
 #endif
