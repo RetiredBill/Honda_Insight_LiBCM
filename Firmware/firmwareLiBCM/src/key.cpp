@@ -15,24 +15,41 @@ uint8_t keyState_previous = KEYSTATE_UNINITIALIZED;
 
 void key_handleKeyEvent_off(void)
 {
+    // key-on to key-off event immediate operational changes
     Serial.print(F("OFF"));
     LED(1,OFF);
     LED(3,OFF);
     BATTSCI_disable(); //Must disable BATTSCI when key is off to prevent backdriving MCM
     METSCI_disable();
-    LTC68042cell_acquireAllCellVoltages();
+
+    // key-off event quick self-test suite (part of BIST)
+    //   All tests need to be quick, with a total elapsed time of less than XXX (a second or 2)
+    //   Will be run on every key-off event
+    //   Ordered by "fundamental-ity" (most fundamental first)
+    //   Any test failure is fatal
+    //JTS2doLater: Add built-in test suite, including VREF, VCELL, Balancing, temp verify (batt and OEM), etc.
+    //LTC68042configure_communicationTest(); //WGCToDo: just an idea
+    //   Note: For BMS_TYPE_WGCLiBCM, this is also (of necesity) done when the BMS wakes up
+    LTC68042configure_doesActualPackSizeMatchUserConfig();
+    //LTC68042configure_VrefTest(); //WGCToDo: just an idea (haven't looked at what this entails)
+    //LTC68042result_saneVoltagesTest(); //WGCToDo: just an idea
+    //WGCToDoNow: deal appropriately with failure of LTC68042configure_basicConfidenceTest()
+    LTC68042configure_basicConfidenceTest();
+    //temperature_thermistorTest(); //WGCToDo: just an idea
+    eeprom_keyOffCheckForExpiredFirmware();
+
+    // key off state operational startup
+    LTC68042cell_acquireAllCellVoltages(); //WGCToDo: this will have happened in the above BIST
     SoC_updateUsingLatestOpenCircuitVoltage(); //JTS2doLater: Add ten minute delay before VoC->SoC LUT
     adc_calibrateBatteryCurrentSensorOffset(DEBUG_TEXT_ENABLED);
     gpio_turnPowerSensors_off();
     LTC68042configure_handleKeyStateChange();
     vPackSpoof_handleKeyOFF();
-    //JTS2doLater: Add built-in test suite, including VREF, VCELL, Balancing, temp verify (batt and OEM), etc.
-    //WGCToDoNow: deal appropriately with failure of LTC68042configure_basicConfidenceTest()
-    LTC68042configure_basicConfidenceTest();
+
+    // enable longer running key-off tests (more BIST)
+    //   non-blocking
+    //   failures are maybe still fatal? TBD
     LTC68042configure_enabletestDischargeFETs();
-    eeprom_keyOffCheckForExpiredFirmware();
-    // For BMS_TYPE_WGCLiBCM, this is also (of necesity) done when LiBCM wakes up
-    LTC68042configure_doesActualPackSizeMatchUserConfig();
 
     time_latestKeyOff_ms_set(millis()); //MUST RUN LAST!
 }

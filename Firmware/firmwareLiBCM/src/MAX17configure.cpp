@@ -611,18 +611,53 @@ bool LTC68042configure_basicConfidenceTest(void)
     //tell the world that cells are no longer balancing
     cellBalance_set_cellsAreBalancing(NO);
 
-    //WGCToDoNow: create common language failure report
+//WGCToDoNow: simulated sense wire failures
+//test1_cellStatusBitmap[0] = 0b111111111111111;
+//test2_cellStatusBitmap[0] = 0b111111111111111;
+//test1_cellStatusBitmap[1] = 0b000000011000000;
+//test2_cellStatusBitmap[1] = 0b000000110000000;
+//test1_cellStatusBitmap[2] = 0b111111111000000;
+//test2_cellStatusBitmap[2] = 0b111111110000000;
+//test1_cellStatusBitmap[3] = 0b001100000000011;
+//test2_cellStatusBitmap[3] = 0b000110000000110;
+
+    //test is done
     uint32_t now_ms = millis();
+
     Serial.println(F("\n+Basic BMC circuit test"));
     Serial.print(F("   Failed cell bitmaps for EVEN cell test: (0x) "));
-    for (uint8_t ic = 0; ic < TOTAL_IC; ic++) {
+    for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
+    {
         Serial.print(test1_cellStatusBitmap[ic], HEX);
         Serial.print(F(", "));
     }
     Serial.print(F("\n   Failed cell bitmaps for ODD  cell test: (0x) "));
-    for (uint8_t ic = 0; ic < TOTAL_IC; ic++) {
+    for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
+    {
         Serial.print(test2_cellStatusBitmap[ic], HEX);
         Serial.print(F(", "));
+    }
+    Serial.println("");
+
+    //create common language failure report
+    uint16_t openWireCellFlags = 0;
+    for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
+    {
+        openWireCellFlags = test1_cellStatusBitmap[ic] & test2_cellStatusBitmap[ic];
+        if (openWireCellFlags)
+        {
+            Serial.print(F(" IC "));
+            Serial.print(ic);
+            Serial.print(F(" cells "));
+            for (uint8_t cellNumber = 0 ; cellNumber < CELLS_PER_IC; cellNumber++)
+            {
+                if (openWireCellFlags & (1 << cellNumber)) {
+                     Serial.print(cellNumber);
+                     Serial.print(F(", "));
+                }
+            }
+            Serial.println(F("\n   likely have open sense cable wire connections"));
+        }
     }
     Serial.print(F("\n   Elapsed test time (ms): "));
     Serial.print(now_ms - testStartTimestamp_ms);
