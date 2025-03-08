@@ -403,12 +403,11 @@ static uint16_t test2_cellStatusBitmap[TOTAL_IC] = {0};
 void LTC68042configure_enabletestDischargeFETs(void) {testDischargeState = TESTDISCHASRGESTATE_TURNON;}
 
 ///////// LTC68042configure_testDischargeFETs helper functions
-void testClearCellTestFlags(void)
+void testHelperClearCellTestFlags(int16_t testFlagBitmap[])
 {
     for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
     {
-        test1_cellStatusBitmap[ic] = 0;
-        test2_cellStatusBitmap[ic] = 0;
+        testFlagBitmap[ic] = 0;
     }
 }
 
@@ -439,6 +438,31 @@ void testDischargeHelperStart(uint16_t cellDischargeBitmap)
 
     //note time
     latestStateTimestamp_ms = millis();
+}
+
+bool testHelperCheckForInsanelyHighOrLowCells(uint16_t cellFailsHighBitmap[], uint16_t cellFailsLowBitmap[])
+{
+    bool didTestFail = false;
+
+    for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
+    {
+        for (uint8_t cellNumber = 0 ; cellNumber < CELLS_PER_IC; cellNumber++)
+        {
+            if (CELL_VMAX_REGEN < cellVoltagesTest_counts[ic][cellNumber])
+            {
+                //then this cell fails high
+                cellFailsHighBitmap[ic] |= (1 << cellNumber);
+            }
+            if (CELL_VMIN_GRIDCHARGER > cellVoltagesTest_counts[ic][cellNumber])
+            {
+                //then this cell fails low
+                cellFailsLowBitmap[ic] |= (1 << cellNumber);
+            }
+        }
+        if (cellFailsHighBitmap[ic] || cellFailsLowBitmap[ic]) { didTestFail = true; }
+    }
+
+    return didTestFail;
 }
 
 //helper function for waiting for odd/even delta voltage separation
@@ -473,7 +497,10 @@ void testDischargeHelperWaiting(int16_t * evenAverageDeltaV_counts, int16_t * od
 }
 
 //helper function for performing odd/even test
-bool testDischargeHelperTesting(uint16_t cellDischargeBitmap)
+bool testDischargeHelperTesting(
+    uint16_t cellDischargeBitmap,       // input bitmap of cells for ALL ICs to turn on cell discharge circuit
+    int16_t passedDischargeBitmap[],    // returns bitmap of cells for each IC that pass discharge test
+    int16_t passedNonDischargeBitmap[]) // returns bitmap of cells for each IC that pass non-discharge test
 {
    //sufficient delta separation has occurred:
     //  note which discharging cells are actually discharging
@@ -489,7 +516,7 @@ bool testDischargeHelperTesting(uint16_t cellDischargeBitmap)
         {
             uint16_t cellBit = (1 << cellNumber);
             //check if discharging cell not yet passed
-            if ( ! (test1_cellStatusBitmap[ic] & cellBit))
+            if ( ! (passedDischargeBitmap[ic] & cellBit))
             {
                 //then check if discharging cell now passes
                 if (  TESTDISCHASRGE_DISCHARGE_TESTLIMIT_counts <
@@ -500,12 +527,12 @@ bool testDischargeHelperTesting(uint16_t cellDischargeBitmap)
                    )
                 {
                     //then this discharging cell has passed
-                    test1_cellStatusBitmap[ic] |= cellBit;
+                    passedDischargeBitmap[ic] |= cellBit;
                 }
             }
         }
         //turn off cell balance circuit for passed cells
-        uint16_t newBitMap = (~test1_cellStatusBitmap[ic]) & cellDischargeBitmap;
+        uint16_t newBitMap = (~(passedDischargeBitmap[ic])) & cellDischargeBitmap;
         LTC68042configure_setBalanceResistors(
           FIRST_IC_ADDR + ic,
           newBitMap,
@@ -541,7 +568,7 @@ bool testDischargeHelperTesting(uint16_t cellDischargeBitmap)
                    )
                 {
                     //then this non-discharging cell has passed
-                    test2_cellStatusBitmap[ic] |= (1 << cellNumber);
+                    passedNonDischargeBitmap[ic] |= (1 << cellNumber);
                 }
             }
         }
@@ -560,7 +587,10 @@ bool LTC68042configure_basicConfidenceTest(void)
     //note test start time
     uint32_t testStartTimestamp_ms = millis();
 
-    testClearCellTestFlags();
+    testHelperClearCellTestFlags(test1_cellStatusBitmap); // re-use some available statics
+    testHelperClearCellTestFlags(test2_cellStatusBitmap); // re-use some available statics
+    uint16_t test3_cellFailsHighBitmap[TOTAL_IC] = {0};
+    uint16_t test4_cellFailsLowBitmap[TOTAL_IC] = {0};
 
     //WGCToDoNow: first check that cell voltages are sane? At least verify LTC68042result_errorCount_get()
 
@@ -571,39 +601,13 @@ bool LTC68042configure_basicConfidenceTest(void)
     testDischargeHelperStart(TESTDISCHASRGE_EvenCellsBitMap);
 
     //note any cell voltages that are near 0 or near double
-    for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
-    {
-        for (uint8_t cellNumber = 0 ; cellNumber < CELLS_PER_IC; cellNumber++)
-        {
-            if (    (CELL_VMAX_REGEN       < cellVoltagesTest_counts[ic][cellNumber])
-                 || (CELL_VMIN_GRIDCHARGER > cellVoltagesTest_counts[ic][cellNumber])
-               )
-            {
-                //then this cell has failed
-                test1_cellStatusBitmap[ic] |= (1 << cellNumber);
-            }
-        }
-        if (test1_cellStatusBitmap[ic]) { didTestFail = true; }
-    }
+    didTestFail &= testHelperCheckForInsanelyHighOrLowCells(test1_cellStatusBitmap, test2_cellStatusBitmap);
 
-     //now do odd cells
+    //now do odd cells
     testDischargeHelperStart(TESTDISCHASRGE_OddCellsBitMap);
 
     //note any cell voltages that are near 0 or near double
-    for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
-    {
-        for (uint8_t cellNumber = 0 ; cellNumber < CELLS_PER_IC; cellNumber++)
-        {
-            if (    (CELL_VMAX_REGEN       < cellVoltagesTest_counts[ic][cellNumber])
-                 || (CELL_VMIN_GRIDCHARGER > cellVoltagesTest_counts[ic][cellNumber])
-               )
-            {
-                //then this cell has failed
-                test2_cellStatusBitmap[ic] |= (1 << cellNumber);
-            }
-        }
-        if (test2_cellStatusBitmap[ic]) { didTestFail = true; }
-    }
+    didTestFail &= testHelperCheckForInsanelyHighOrLowCells(test3_cellFailsHighBitmap, test4_cellFailsLowBitmap);
 
     //turn off all cell discharge circuits
     disableDischargeResistors();
@@ -625,16 +629,28 @@ bool LTC68042configure_basicConfidenceTest(void)
     uint32_t now_ms = millis();
 
     Serial.println(F("\n+Basic BMC circuit test"));
-    Serial.print(F("   Failed cell bitmaps for EVEN cell test: (0x) "));
+    Serial.print(F(  "   Failed HIGH cell bitmaps for EVEN cell test: (0x) "));
     for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
     {
         Serial.print(test1_cellStatusBitmap[ic], HEX);
         Serial.print(F(", "));
     }
-    Serial.print(F("\n   Failed cell bitmaps for ODD  cell test: (0x) "));
+    Serial.print(F("\n   Failed LOW  cell bitmaps for EVEN cell test: (0x) "));
     for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
     {
         Serial.print(test2_cellStatusBitmap[ic], HEX);
+        Serial.print(F(", "));
+    }
+    Serial.print(F("\n   Failed HIGH cell bitmaps for ODD  cell test: (0x) "));
+    for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
+    {
+        Serial.print(test3_cellFailsHighBitmap[ic], HEX);
+        Serial.print(F(", "));
+    }
+    Serial.print(F("\n   Failed LOW  cell bitmaps for ODD  cell test: (0x) "));
+    for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
+    {
+        Serial.print(test4_cellFailsLowBitmap[ic], HEX);
         Serial.print(F(", "));
     }
     Serial.println("");
@@ -703,7 +719,8 @@ if (testDischargeState != TESTDISCHASRGESTATE_DISABLED) { //WGCToDo: debugging o
 
     if (testDischargeState == TESTDISCHASRGESTATE_TURNON)
     {
-        testClearCellTestFlags();
+        testHelperClearCellTestFlags(test1_cellStatusBitmap);
+        testHelperClearCellTestFlags(test2_cellStatusBitmap);
 
         //tell the world that cells are balancing
         cellBalance_set_cellsAreBalancing(YES);
@@ -741,7 +758,7 @@ if (testDischargeState != TESTDISCHASRGESTATE_DISABLED) { //WGCToDo: debugging o
 
     else if (testDischargeState == TESTDISCHASRGESTATE_TESTING_EVEN)
     {
-        if (testDischargeHelperTesting(TESTDISCHASRGE_EvenCellsBitMap))
+        if (testDischargeHelperTesting(TESTDISCHASRGE_EvenCellsBitMap, test1_cellStatusBitmap, test2_cellStatusBitmap))
         {
             //then test wait is over
             testDischargeState = TESTDISCHASRGESTATE_DONE_EVEN; // next state
@@ -789,7 +806,7 @@ if (testDischargeState != TESTDISCHASRGESTATE_DISABLED) { //WGCToDo: debugging o
 
     else if (testDischargeState == TESTDISCHASRGESTATE_TESTING_ODD)
     {
-        if (testDischargeHelperTesting(TESTDISCHASRGE_OddCellsBitMap))
+        if (testDischargeHelperTesting(TESTDISCHASRGE_OddCellsBitMap, test1_cellStatusBitmap, test2_cellStatusBitmap))
         {
             //then test wait is over
             testDischargeState = TESTDISCHASRGESTATE_DONE; // next state
