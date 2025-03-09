@@ -41,9 +41,9 @@
                                | BITVALUE(MCONT_PRTX_INT_FLAGS)\
                                | BITVALUE(MCONT_RX_STATUS_POLL)\
                                | BITVALUE(MCONT_RX_MESSAGE))
-  //   Only RX the return, no checks
-  #define MCONT_RX_NO_CHECKS (   BITVALUE(MCONT_RX_STATUS_POLL)\
-                               | BITVALUE(MCONT_RX_MESSAGE))
+  //   Only RX the return, no extra checks
+  #define MCONT_RX_MINIMUM_CHECKS (   BITVALUE(MCONT_RX_STATUS_POLL)\
+                                    | BITVALUE(MCONT_RX_MESSAGE))
   //   Just launch the message, no RX, no checks
   //   Note: this is more efficiently done with a simple spiWrite() call
   #define MCONT_NO_RX_NO_CHECKS  0

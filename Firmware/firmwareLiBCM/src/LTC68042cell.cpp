@@ -171,8 +171,8 @@ void validateAndStoreNextMAX17843(uint8_t chipAddress)
 
     do //repeats until PECs match (i.e. no data transmission errors)
     {
-        readOk &= MAX1784Xcomms_readBlock843(M873_CELL1, (1 + M873_TOTAL - M873_CELL1), chipAddress, rawReadings, MCONT_RX_NO_CHECKS);
-        readOk &= MAX1784Xcomms_readDev843Reg(M873_DIAG, chipAddress, &rawDieTemp, MCONT_RX_NO_CHECKS);
+        readOk &= MAX1784Xcomms_readBlock843(M873_CELL1, (1 + M873_TOTAL - M873_CELL1), chipAddress, rawReadings, MCONT_RX_MINIMUM_CHECKS);
+        readOk &= MAX1784Xcomms_readDev843Reg(M873_DIAG, chipAddress, &rawDieTemp, MCONT_RX_MINIMUM_CHECKS);
         if (attemptCounter++ > 1) { LTC68042result_errorCount_increment(); } //log each error
     } while ((!readOk) && (attemptCounter < MAX_READ_ATTEMPTS)); //retry if error
 
@@ -246,6 +246,10 @@ void processAllCellVoltages(void)
     {
         for (int cell=0; cell < CELLS_PER_IC; cell++) //actual LTC cell number: 'cell' + 1 (zero-indexed)
         {
+            //WGCToDo: the floating multiply could be replaced by a faster integer multiply then right shift
+            //WGCToDo:    x * 0.762939 -> ((x * 49) >> 6) [0.35% error)
+            //WGCToDo:   see "Mult>> Finder" tab in Motherboard/RevC/V&V/OEM Current Sensor.ods
+            //WGCToDo: Maybe do fast/close while key-on, and slow/accurate while key-off?
             uint16_t cellVoltageUnderTest = (uint16_t)((float)cellVoltages_counts[chip][cell] * MAX17873_CONVERSION_TO_100uV_per_bit) ;
 
             //accumulate Vpack
