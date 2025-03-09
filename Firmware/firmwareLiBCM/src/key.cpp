@@ -39,7 +39,7 @@ void key_handleKeyEvent_off(void)
     eeprom_keyOffCheckForExpiredFirmware();
 
     // key off state operational startup
-    LTC68042cell_acquireAllCellVoltages(); //WGCToDo: this will have happened in the above BIST
+    LTC68042cell_acquireAllCellVoltages();
     SoC_updateUsingLatestOpenCircuitVoltage(); //JTS2doLater: Add ten minute delay before VoC->SoC LUT
     adc_calibrateBatteryCurrentSensorOffset(DEBUG_TEXT_ENABLED);
     gpio_turnPowerSensors_off();

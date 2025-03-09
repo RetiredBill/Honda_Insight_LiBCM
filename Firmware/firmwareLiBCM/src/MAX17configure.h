@@ -319,6 +319,9 @@
       }
       */
 
+    //basic cell discharge circuit test
+    #define TESTBASIC_DELTA_TESTLIMIT_counts  20 //WGCToDoNow: this limit surely needs refinement, and likely won't work in BMS_TYPE_WGCLiBCM at all
+
     // testDischargeFETs defines
     #define TESTDISCHASRGE_EvenCellsBitMap 0b0000010101010101
     #define TESTDISCHASRGE_OddCellsBitMap  0b0000101010101010
