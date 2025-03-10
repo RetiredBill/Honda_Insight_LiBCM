@@ -34,20 +34,15 @@
     #include "lcdState.h"
     #include "lcdTransmit.h"
     #include "gridCharger.h"
+    #include "BitFieldMacros.h"
+    #include "MAX17841.h"
+    #include "MAX17843.h"
+    #include "MAX1784Xcomms.h"
+    #include "LTC68042configure.h"
     #ifdef BMS_TYPE_LiBCM
-        //WGCToDo: CRITICAL had to delete LTC68042configure.* for now.
-        // Need to figure out best way to tell arduino-builder to not link
-        // LTC68042xxx.o
-        #include "LTC68042configure.h"
     #elif defined BMS_TYPE_WGCLiBCM
       #ifdef BATTERY_TYPE_5AhG3
         #error (Distributed BMS does not support 5AhG3 battery type - change config.h)
-      #else
-        #include "BitFieldMacros.h"
-        #include "MAX17841.h"
-        #include "MAX17843.h"
-        #include "MAX1784Xcomms.h"
-        #include "MAX17configure.h"
       #endif
     #else
         #error (Select BMS board type - LiBCM or WGCLiBCM - in config.h)

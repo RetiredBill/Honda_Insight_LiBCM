@@ -1,6 +1,7 @@
-// MAX17xxx configuration functions
-// Based on LTC68042configure.cpp, Copyright 2021-2024(c) John Sullivan
-//    github.com/doppelhub/Honda_Insight_LiBCM
+//Copyright 2021-2024(c) John Sullivan
+//github.com/doppelhub/Honda_Insight_LiBCM
+
+//LTC6804 and MAX17xxx configuration functions
 
 // MAX17843 is 12-cell BMS management IC, which uses differential UART busses for communication.
 // MAX17841 is a differential UART-to-SPI bridge IC
@@ -19,18 +20,23 @@
 #else
   uint32_t lastMAX1784xTimestamp_millis = 0; // for optimizing delays
 #endif
+
 /////////////////////////////////////////////////////////////////////////////////////////
 
 void MAX17841configure_enableMAX17841(void) {
-  digitalWrite(PIN_SHDNL_MAX17841, HIGH); // Enable MAX17841
-  lastMAX1784xTimestamp_millis = millis(); // will need to do t_startup delay
+  #ifdef BMS_TYPE_WGCLiBCM
+    digitalWrite(PIN_SHDNL_MAX17841, HIGH); // Enable MAX17841
+    lastMAX1784xTimestamp_millis = millis(); // will need to do t_startup delay
+  #endif
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
 void MAX17841configure_disableMAX17841(void) {
-  digitalWrite(PIN_SHDNL_MAX17841, LOW); // disable MAX17841
-  lastMAX1784xTimestamp_millis = millis(); // will need to do t_shutdown delay
+  #ifdef BMS_TYPE_WGCLiBCM
+    digitalWrite(PIN_SHDNL_MAX17841, LOW); // disable MAX17841
+    lastMAX1784xTimestamp_millis = millis(); // will need to do t_shutdown delay
+  #endif
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -89,7 +95,7 @@ void LTC68042configure_setBalanceResistors(uint8_t icAddress, uint16_t cellBitma
     configurationRegisterData[4] = (uint8_t)(cellBitmap); //LSByte
     configurationRegisterData[5] = ( ((uint8_t)(cellBitmap >> 8)) | softwareTimeout ); //MSByte's lower nibble
 
-    MAX17843configure_writeConfigRegisters(icAddress);
+    LTC68042configure_writeConfigRegisters(icAddress);
   #else
     //WGCToDo: softwareTimeout is LTC6804_DISCHARGE_TIMEOUT_02_SECONDS, which is 0! (as of 2/9/25)
     // Set up watchdog timer for 2 sec
@@ -110,108 +116,136 @@ void LTC68042configure_setBalanceResistors(uint8_t icAddress, uint16_t cellBitma
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-// Compared to BMS_TYPE_WGCLiBCM, LiBCM version of this is relatively fast (12 SPI bytes => 384us @ 32us/byte),
-//   whereas for BMS_TYPE_WGCLiBCM, wakeup() alone takes ~4.3ms! Total is ~6.8ms
+//program configuration register values onto each LTC6804 IC
+//CFGR0:3 are reset when LTC watchdog timer expires (~2000 milliseconds)
+//CFGR4:5 are reset when LTC watchdog timer expires, unless software timer is set (and hasn't expired)
 //Initialize BMS system to "fresh start" state
 void LTC68042configure_programVolatileDefaults(void)
 {
-  bool allOk = true;
-  char msg[30];
-  uint32_t moduleId[TOTAL_IC];
-  uint16_t registerValue[TOTAL_IC];
+  #ifndef BMS_TYPE_WGCLiBCM
+                                                 // BIT7    BIT6    BIT5    BIT4    BIT3    BIT2    BIT1   BIT0
+                                                 ///////////////////////////////////////////////////////////////
+    configurationRegisterData[0] = 0b11111111 ;  //GPIO5   GPIO4   GPIO3   GPIO2   GPIO1   REFON   SWTRD  ADCOPT
+    configurationRegisterData[1] = 0x00       ;  //VUV[7]  VUV[6]  VUV[5]  VUV[4]  VUV[3]  VUV[2]  VUV[1] VUV[0]
+    configurationRegisterData[2] = 0x00       ;  //VOV[3]  VOV[2]  VOV[1]  VOV[0]  VUV[11] VUV[10] VUV[9] VUV[8]
+    configurationRegisterData[3] = 0x00       ;  //VOV[11] VOV[10] VOV[9]  VOV[8]  VOV[7]  VOV[6]  VOV[5] VOV[4]
+    configurationRegisterData[4] = 0x00       ;  //DCC8    DCC7    DCC6    DCC5    DCC4    DCC3    DCC2   DCC1
+    configurationRegisterData[5] = 0x00       ;  //DCTO[3] DCTO[2] DCTO[1] DCTO[0] DCC12   DCC11   DCC10  DCC9
+    //Above values turn off all discharge FETs, turns reference on, and configure ADC LPF to '2 kHz mode' (1.7 kHz LPF)
+    //see Table36 (p51) for more info:
+    //DCTO  = set discharge timer
+    //DCC   = control cell discharge FET (1=on)
+    //VUV   = undervoltage comparison voltage ((VUV+1) * 16 * 100uV)
+    //VOV   = over voltage comparison voltage ((VUV  ) * 16 * 100uV)
+    //GPIO  = read to get pinState, write 0/1 to enable/disable pull-down (disabled by default)
+    //REFON = keep ADC reference powered whenever IC awake (reduces ADC delay)
+    //SWTRD = (read only) is SWTEN (PIN_SOFTWARE_TIMER_ENABLE) high or low (high=SW timer allowed)
+    //ADCOPT= sets adc fast/normal/slow LPF cutoff frequency values (0: 27k/7k/26 Hz)(1: 14k/3k/2k Hz)
+        //Note: fast, normal, or slow is configured in ADCV command
 
-  // Initialize all MAX17843 chips via reset.
-  // If we are executing after a POR,
-  //   then the reset is done (and we'll verify this),
-  // else do the POR reset here
-  //WGCToDo: Options to initialize 871:
-  //  Pulse SHDNL (inducing POR), then write 4 selected registers (2 SPI bytes each), and 1 command (1 SPI byte)
-  //    1uSec tau on SHDNl line, so low time should be ... This actually requires significant delay, so:
-  //  Just write a 7 byte block (2 SPI bytes), and 1 command (1 SPI byte)
-  //  => quicker to write 7 1 byte registers
-  //WGCToDo: Use LTC68042configure_wakeup() instead?
-  if ( (! MAX1784Xcomms_justWokeUp()) ||
+    LTC68042configure_writeConfigRegisters(BROADCAST_TO_ALL_ICS);
+  #else
+    // Compared to BMS_TYPE_WGCLiBCM, LiBCM version of this is relatively fast (12 SPI bytes => 384us @ 32us/byte),
+    //   whereas for BMS_TYPE_WGCLiBCM, wakeup() alone takes ~4.3ms! Total is ~6.8ms
+
+    bool allOk = true;
+    char msg[30];
+    uint32_t moduleId[TOTAL_IC];
+    uint16_t registerValue[TOTAL_IC];
+
+    // Initialize all MAX17843 chips via reset.
+    // If we are executing after a POR,
+    //   then the reset is done (and we'll verify this),
+    // else do the POR reset here
+    //WGCToDo: Options to initialize 871:
+    //  Pulse SHDNL (inducing POR), then write 4 selected registers (2 SPI bytes each), and 1 command (1 SPI byte)
+    //    1uSec tau on SHDNl line, so low time should be ... This actually requires significant delay, so:
+    //  Just write a 7 byte block (2 SPI bytes), and 1 command (1 SPI byte)
+    //  => quicker to write 7 1 byte registers
+    //WGCToDo: Use LTC68042configure_wakeup() instead?
+    if ( (! MAX1784Xcomms_justWokeUp()) ||
        (! MAX1784Xcomms_max17841_CheckForPOR()) ) { //WGCToDo: may not also need this condition
-    // then a full POR needs to be forced
-    MAX1784Xcomms_max17843_reset();
-    //NB: want to get the MAX1784Xcomms_max17841_Init() done promptly, to keep the keep-alive going
-  }
-  // else the expectation is that MAX17841 and 843 chips are waking from off state
-  //WGCToDo: this and delay() could be optimized; isn't always needed
-  MAX17841configure_enableMAX17841();
-  //WGCToDo: convert blocking delays to timestamps/ready checks
-  delay(M871_STARTUP_TIME_ms); //WGCToDo: some delay is needed here, maybe not a full 2ms
-  MAX1784Xcomms_max17841_Init();
+        // then a full POR needs to be forced
+        MAX1784Xcomms_max17843_reset();
+        //NB: want to get the MAX1784Xcomms_max17841_Init() done promptly, to keep the keep-alive going
+    }
+    // else the expectation is that MAX17841 and 843 chips are waking from off state
+    //WGCToDo: this and delay() could be optimized; isn't always needed
+    MAX17841configure_enableMAX17841();
+    //WGCToDo: convert blocking delays to timestamps/ready checks
+    delay(M871_STARTUP_TIME_ms); //WGCToDo: some delay is needed here, maybe not a full 2ms
+    MAX1784Xcomms_max17841_Init();
 
-  //WGCToDo: convert blocking delays to timestamps/ready checks
-  while(millis() - lastMAX1784xTimestamp_millis < M871_STARTUP_TIME_ms) { ; }
-  MAX1784Xcomms_wakeup();                // Wake up instructions for start up
-  // For BMS_TYPE_WGCLiBCM, "Hello all" command is performed in (modified)
-  //   LTC68042configure_doesActualPackSizeMatchUserConfig(), since "Hello all" is required
-  //   to initialze MAX17843 devices, and it inherently checks the number of
-  //   battery modules found.
-  allOk &= LTC68042configure_doesActualPackSizeMatchUserConfig();
+    //WGCToDo: convert blocking delays to timestamps/ready checks
+    while(millis() - lastMAX1784xTimestamp_millis < M871_STARTUP_TIME_ms) { ; }
+    MAX1784Xcomms_wakeup();                // Wake up instructions for start up
+    // For BMS_TYPE_WGCLiBCM, "Hello all" command is performed in (modified)
+    //   LTC68042configure_doesActualPackSizeMatchUserConfig(), since "Hello all" is required
+    //   to initialze MAX17843 devices, and it inherently checks the number of
+    //   battery modules found.
+    allOk &= LTC68042configure_doesActualPackSizeMatchUserConfig();
 
-  // Note: since ALRTRST bit in STATUS register has not been cleared yet, read back Data check bytes will not be 0
-  MAX1784Xcomms_setExpectedDataCheck(DATA_CHECK_EXPECTED_POR);
+    // Note: since ALRTRST bit in STATUS register has not been cleared yet, read back Data check bytes will not be 0
+    MAX1784Xcomms_setExpectedDataCheck(DATA_CHECK_EXPECTED_POR);
 
-  // Note: since ALIVECNTEN bit in DEVCFG1 register has not benn set yet, Alive counter byte is not useful yet.
-  MAX1784Xcomms_disableAliveCount();  // disable alive-count checking for now
+    // Note: since ALIVECNTEN bit in DEVCFG1 register has not benn set yet, Alive counter byte is not useful yet.
+    MAX1784Xcomms_disableAliveCount();  // disable alive-count checking for now
 
-  //WGCToDo speedup: Move checks to end of coldboot or sometime later
-  // These all should return a data-check of DATA_CHECK_EXPECTED_POR
-  // Get LSB of ID from ID1
-  MAX1784Xcomms_readAll843Reg(M873_ID1, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
-  for (int DAx = 0; DAx < TOTAL_IC; DAx++) {
-    moduleId[DAx] = registerValue[DAx];
-  }
-  // Get MSB of ID and ROM CRC from ID2
-  MAX1784Xcomms_readAll843Reg(M873_ID2, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
-  Serial.println();
-  for (int DAx = 0; DAx < TOTAL_IC; DAx++) {
-    moduleId[DAx] += ((uint32_t)BFN_GET(M873_ID2_bfDEVIDMsb, registerValue[DAx]) << 16);
-    Serial.print(F("Device "));
-    Serial.print(DAx);
-    Serial.print(F(" has ID: 0x"));
-    Serial.print(moduleId[DAx], HEX);
-    Serial.print(F(" and ROM CRC: 0x"));
-    Serial.println(BFN_GET(M873_ID2_bfROMCRC, registerValue[DAx]), HEX);
-  }
+    //WGCToDo speedup: Move checks to end of coldboot or sometime later
+    // These all should return a data-check of DATA_CHECK_EXPECTED_POR
+    // Get LSB of ID from ID1
+    MAX1784Xcomms_readAll843Reg(M873_ID1, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
+    for (int DAx = 0; DAx < TOTAL_IC; DAx++) {
+        moduleId[DAx] = registerValue[DAx];
+    }
+    // Get MSB of ID and ROM CRC from ID2
+    MAX1784Xcomms_readAll843Reg(M873_ID2, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
+    Serial.println();
+    for (int DAx = 0; DAx < TOTAL_IC; DAx++) {
+        moduleId[DAx] += ((uint32_t)BFN_GET(M873_ID2_bfDEVIDMsb, registerValue[DAx]) << 16);
+        Serial.print(F("Device "));
+        Serial.print(DAx);
+        Serial.print(F(" has ID: 0x"));
+        Serial.print(moduleId[DAx], HEX);
+        Serial.print(F(" and ROM CRC: 0x"));
+        Serial.println(BFN_GET(M873_ID2_bfROMCRC, registerValue[DAx]), HEX);
+    }
 
-  strcpy(msg, "device ");
-  msg[7] = '0';
-  strcpy(&(msg[8]), " Model/version");
-  MAX1784Xcomms_readAll843Reg(M873_VERSION, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
-  for (int DAx = 0; DAx < TOTAL_IC; DAx++) {
-    msg[7] = (char)DAx + '0';
-    allOk &= MAX1784Xcomms_checkActualVsExpected(registerValue[DAx], M873_MODEL_VERSION, msg, __func__);
-  }
+    strcpy(msg, "device ");
+    msg[7] = '0';
+    strcpy(&(msg[8]), " Model/version");
+    MAX1784Xcomms_readAll843Reg(M873_VERSION, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
+    for (int DAx = 0; DAx < TOTAL_IC; DAx++) {
+        msg[7] = (char)DAx + '0';
+        allOk &= MAX1784Xcomms_checkActualVsExpected(registerValue[DAx], M873_MODEL_VERSION, msg, __func__);
+    }
 
-  // Read STATUS, and verify all just have M873_STATUS_ALRTRST set, with data-check of DATA_CHECK_EXPECTED_POR
-  strcpy(&(msg[8]), " STATUS");
-  MAX1784Xcomms_readAll843Reg(M873_STATUS, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
-  for (int DAx = 0; DAx < TOTAL_IC; DAx++) {
-    msg[7] = (char)DAx + '0';
-    allOk &= MAX1784Xcomms_checkActualVsExpected(registerValue[DAx], BITVALUE(M873_STATUS_ALRTRST), msg, __func__);
-  }
+    // Read STATUS, and verify all just have M873_STATUS_ALRTRST set, with data-check of DATA_CHECK_EXPECTED_POR
+    strcpy(&(msg[8]), " STATUS");
+    MAX1784Xcomms_readAll843Reg(M873_STATUS, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
+    for (int DAx = 0; DAx < TOTAL_IC; DAx++) {
+        msg[7] = (char)DAx + '0';
+        allOk &= MAX1784Xcomms_checkActualVsExpected(registerValue[DAx], BITVALUE(M873_STATUS_ALRTRST), msg, __func__);
+    }
 
-  // Verify that FMEA1, FMEA2 values are all M873_CLEAR_ALL (should be after POR. Maybe only a warning?)
-  strcpy(&(msg[8]), " FMEA1");
-  MAX1784Xcomms_readAll843Reg(M873_FMEA1, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
-  for (int DAx = 0; DAx < TOTAL_IC; DAx++) {
-    msg[7] = (char)DAx + '0';
-    allOk &= MAX1784Xcomms_checkActualVsExpected(registerValue[DAx], M873_CLEAR_ALL, msg, __func__);
-  }
-  strcpy(&(msg[8]), " FMEA2");
-  MAX1784Xcomms_readAll843Reg(M873_FMEA2, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
-  for (int DAx = 0; DAx < TOTAL_IC; DAx++) {
-    msg[7] = (char)DAx + '0';
-    allOk &= MAX1784Xcomms_checkActualVsExpected(registerValue[DAx], M873_CLEAR_ALL, msg, __func__);
-  }
-  //WGCToDo speedup: end of checks to defer
+    // Verify that FMEA1, FMEA2 values are all M873_CLEAR_ALL (should be after POR. Maybe only a warning?)
+    strcpy(&(msg[8]), " FMEA1");
+    MAX1784Xcomms_readAll843Reg(M873_FMEA1, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
+    for (int DAx = 0; DAx < TOTAL_IC; DAx++) {
+        msg[7] = (char)DAx + '0';
+        allOk &= MAX1784Xcomms_checkActualVsExpected(registerValue[DAx], M873_CLEAR_ALL, msg, __func__);
+    }
+    strcpy(&(msg[8]), " FMEA2");
+    MAX1784Xcomms_readAll843Reg(M873_FMEA2, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
+    for (int DAx = 0; DAx < TOTAL_IC; DAx++) {
+        msg[7] = (char)DAx + '0';
+        allOk &= MAX1784Xcomms_checkActualVsExpected(registerValue[DAx], M873_CLEAR_ALL, msg, __func__);
+    }
+    //WGCToDo speedup: end of checks to defer
 
-  // configure all MAX17842 registers
-  MAX1784Xcomms_setup843Registers(TOTAL_IC);
+    // configure all MAX17842 registers
+    MAX1784Xcomms_setup843Registers(TOTAL_IC);
+  #endif
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -311,10 +345,16 @@ bool LTC68042configure_doesActualPackSizeMatchUserConfig(void)
 
 void LTC68042configure_initialize(void)
 {
+  #ifndef BMS_TYPE_WGCLiBCM
+    spi_enable(SPI_CLOCK_DIV64); //JTS2doLater: increase clock speed //DIV16 & DIV32 work on bench
+  #else
     MAX17841configure_enableMAX17841(); // get a head start on tstartup delay
     pinMode(PIN_SHDNL_MAX17841, OUTPUT);
     MAX1784Xcomms_setJustWokeUpState(true);
     spi_enable(SPI_CLOCK_DIV64); //JTS2doLater: increase clock speed //DIV16 & DIV32 work on bench
+    //spi_enable(SPI_CLOCK_DIV16);//WGCToDo: works, but need some tweaking
+    //spi_enable(SPI_CLOCK_DIV8);//WGCToDo: probably works, but need even more tweaking
+  #endif
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -332,6 +372,7 @@ void LTC68042configure_pulseChipSelectLow(uint16_t lowPulsePeriod_us)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
+//wake up LTC core if watchdog timed out
 // For BMS_TYPE_WGCLiBCM, LTC68042configure_wakeupCore is #ifndef'd out, never called.
 //   MAX1784x chips are automatically kept awake by MAX17841 keep-alive function.
 bool LTC68042configure_wakeupCore(void)
@@ -356,6 +397,7 @@ bool LTC68042configure_wakeupCore(void)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
+//wake up isoSPI if timed out
 // For BMS_TYPE_WGCLiBCM, LTC68042configure_wakeupIsoSPI is #ifndef'd out, never called.
 //   MAX1784x chips are automatically kept awake by MAX17841 keep-alive function.
 void LTC68042configure_wakeupIsoSPI(void)
@@ -415,6 +457,7 @@ void testHelper_clearCellTestFlags(int16_t testFlagBitmap[])
 //helper for optimized acquisition of cell volatges
 //  (LTC68042cell_acquireAllCellVoltages() might do 2 aquisitions when only 1 is required)
 // Note: this scheme is only optimum when used inside of a single blocking test function
+//WGCToDoNow: there may be an issue of not waiting for acquisition complete?
 void testHelper_finishInProcessAcquision(void)
 {
     if (LTC68042cell_nextVoltages() != CELL_DATA_PROCESSED)
@@ -427,11 +470,12 @@ void testHelper_finishInProcessAcquision(void)
     //and we can hold right there, as long as this is only called within a single blocking test routine
 }
 
+//WGCToDoNow: there may be an issue of not waiting for acquisition complete?
 void testHelper_acquireAllCellVoltages(void)
 {
     while (LTC68042cell_nextVoltages() != CELL_DATA_PROCESSED) { ; } //gather new data
-    for (uint8_t ic = 0; ic < TOTAL_IC; ic++) debugUSB_printOneICsCellVoltages( ic, 3);//WGCToDoNow: debug only
-    Serial.println("");//WGCToDoNow: debug only
+    //for (uint8_t ic = 0; ic < TOTAL_IC; ic++) debugUSB_printOneICsCellVoltages( ic, FOUR_DECIMAL_PLACES);//WGCToDoNow: debug only
+    //Serial.println("");//WGCToDoNow: debug only
 }
 
 //helper function to set up a cell discharge circuit test
@@ -669,6 +713,7 @@ bool LTC68042configure_basicConfidenceTest(void)
     testHelper_saveCellVoltages();
 
     //================== now do even cells
+    //WGCToDoNow: IS_DISCHARGE_ALLOWED_DURING_CONVERSION needs to be DCP_ENABLED during LTC68042configure_basicConfidenceTest, but it isn't
     testHelper_setCellDischarge(TESTDISCHASRGE_EvenCellsBitMap);
 
     //measure and check while even cells are discharging
@@ -956,14 +1001,27 @@ if (testDischargeState != TESTDISCHASRGESTATE_DISABLED) { //WGCToDo: debugging o
 uint16_t LTC68042configure_calcPEC15(uint8_t len, //data array length
                                      uint8_t const data[] ) //data array to generate PEC from
 {
-  uint16_t poly = 0b10110010; // PEC/CRC polynomial
-  uint16_t remainder = 0x00;
+  #ifndef BMS_TYPE_WGCLiBCM
+    uint16_t remainder,addr;
 
-  for (uint8_t i = 0; i < len; i++)
-  {
-    remainder = crc8Table[(uint8_t)remainder ^ data[i]];
-  }
-  return remainder;
+    remainder = 16;//initialize the PEC
+    for (uint8_t i = 0; i<len; i++) // loops for each byte in data array
+    {
+        addr = ( (remainder>>7)^data[i] ) & 0xff;//calculate PEC table address
+        remainder = (remainder<<8) ^ crc15Table[addr];
+    }
+
+    return(remainder<<1);//The CRC15 LSB is 0, so multiply by 2
+  #else
+    uint16_t poly = 0b10110010; // PEC/CRC polynomial
+    uint16_t remainder = 0x00;
+
+    for (uint8_t i = 0; i < len; i++)
+    {
+        remainder = crc8Table[(uint8_t)remainder ^ data[i]];
+    }
+    return remainder;
+  #endif
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -972,27 +1030,32 @@ uint16_t LTC68042configure_calcPEC15(uint8_t len, //data array length
 // This function has more affinity with MAX1784Xcomms.
 // Write out bytes on SPI port while ignoring any bytes coming in
 void LTC68042configure_spiWrite(
-  uint8_t len,          // number of bytes to be written on the SPI port
-  uint8_t const data[]) // array of bytes to be written on the SPI port
+    uint8_t len,          // number of bytes to be written on the SPI port
+    uint8_t const data[]) // array of bytes to be written on the SPI port
 {
-  //WGCToDo: not implimented yet: LTC68042configure_wakeup();
+  #ifndef BMS_TYPE_WGCLiBCM
+    LTC68042configure_wakeup();
 
-  digitalWrite(PIN_SPI_CS, LOW);  // assert chip select
-  for (uint8_t i = 0; i < len; i++) {
-    SPDR = (char)data[i];                  //start the SPI transfer
-    /*
-     * The following NOP introduces a small delay that can prevent the wait
-     * loop form iterating when running at the maximum speed. This gives
-     * about 10% more speed, even if it seems counter-intuitive. At lower
-     * speeds it is unnoticed.
-     */
-    asm volatile("nop");
-    while (!(SPSR & _BV(SPIF)));  //wait for transfer to complete
-  }
-  digitalWrite(PIN_SPI_CS, HIGH); // de-assert chip select
+    digitalWrite(PIN_SPI_CS,LOW);
+    for (uint8_t i = 0; i < len; i++) { spi_write((char)data[i]); } //all SPI writes occur here
+    digitalWrite(PIN_SPI_CS,HIGH);
 
-  //lastTimeDataSent_millis = millis();
-
+    lastTimeDataSent_millis = millis();
+  #else
+    digitalWrite(PIN_SPI_CS, LOW);  // assert chip select
+    for (uint8_t i = 0; i < len; i++) {
+        SPDR = (char)data[i];                  //start the SPI transfer
+        /*
+         * The following NOP introduces a small delay that can prevent the wait
+         * loop form iterating when running at the maximum speed. This gives
+         * about 10% more speed, even if it seems counter-intuitive. At lower
+         * speeds it is unnoticed.
+         */
+        asm volatile("nop");
+        while (!(SPSR & _BV(SPIF)));  //wait for transfer to complete
+    }
+    digitalWrite(PIN_SPI_CS, HIGH); // de-assert chip select
+  #endif
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -1007,24 +1070,30 @@ void LTC68042configure_spiWriteRead(
   uint8_t *rx_data,  // Input: array that will store the data read by the SPI port
   uint8_t rx_len )   // number of bytes to be read from the SPI port
 {
-  //WGCToDo: not implimented yet: LTC68042configure_wakeup();
+  #ifndef BMS_TYPE_WGCLiBCM
+    LTC68042configure_wakeup();
 
-  digitalWrite(PIN_SPI_CS, LOW); // assert chip select
-  for (uint8_t i = 0; i < tx_len; i++) {
-    SPDR = (char)tx_Data[i];      // start the SPI transfer
-    asm volatile("nop");
-    while (!(SPSR & _BV(SPIF)));  // wait for transfer to complete
-  }
-  for (uint8_t i = 0; i < rx_len; i++) {
-    SPDR = 0;                     // send out null byte to start SPI transfer
-    asm volatile("nop");
-    while (!(SPSR & _BV(SPIF)));  // wait for transfer to complete
-    rx_data[i] = (uint8_t)SPDR;   // return read data
-  }
-  digitalWrite(PIN_SPI_CS, HIGH); // de-assert chip select
+    digitalWrite(PIN_SPI_CS,LOW);
+    for (uint8_t i = 0; i < tx_len; i++) { spi_write(tx_Data[i]); }
+    for (uint8_t i = 0; i < rx_len; i++) { rx_data[i] = (uint8_t)spi_read(0xFF); }
+    digitalWrite(PIN_SPI_CS,HIGH);
 
-  //lastTimeDataSent_millis = millis();
-
+    lastTimeDataSent_millis = millis();
+  #else
+    digitalWrite(PIN_SPI_CS, LOW); // assert chip select
+    for (uint8_t i = 0; i < tx_len; i++) {
+        SPDR = (char)tx_Data[i];      // start the SPI transfer
+        asm volatile("nop");
+        while (!(SPSR & _BV(SPIF)));  // wait for transfer to complete
+    }
+    for (uint8_t i = 0; i < rx_len; i++) {
+        SPDR = 0;                     // send out null byte to start SPI transfer
+        asm volatile("nop");
+        while (!(SPSR & _BV(SPIF)));  // wait for transfer to complete
+        rx_data[i] = (uint8_t)SPDR;   // return read data
+    }
+    digitalWrite(PIN_SPI_CS, HIGH); // de-assert chip select
+  #endif
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////

@@ -11,11 +11,13 @@
 //  Example: cellVoltages_counts[0][ 1] is IC_1 cell_02
 //  Example: cellVoltages_counts[3][11] is IC_4 cell_12
 uint16_t cellVoltages_counts[TOTAL_IC][CELLS_PER_IC];
+uint32_t conversionStart_ms = 0;
 
 //JTS2doLater: Add cell voltage test that sets user alert if a cell voltage suddenly changes from 'balanced' to 'majorly imbalanced'
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
+#ifdef BMS_TYPE_LiBCM
 //tell all LTC68042 ICs to measure all cells
 //  (private method)
 void startCellConversion(void)
@@ -23,6 +25,7 @@ void startCellConversion(void)
     uint8_t cmd[4];
 
     //JTS2doLater: Replace magic numbers with #define
+    //WGCToDoNow: IS_DISCHARGE_ALLOWED_DURING_CONVERSION needs to be DCP_ENABLED during LTC68042configure_basicConfidenceTest, but it isn't
     //Cell Voltage conversion command
     uint8_t ADCV[2] = { ((MD_FILTERED & 0x02 ) >> 1) + 0x02,  //set bit 9 true
                         ((MD_FILTERED & 0x01 ) << 7) + 0x60 + (IS_DISCHARGE_ALLOWED_DURING_CONVERSION<<4) + CELL_CH_ALL };
@@ -37,10 +40,12 @@ void startCellConversion(void)
     cmd[3] = (uint8_t)(temp_pec);
 
     LTC68042configure_spiWrite(4,cmd); //send 'adcv' command to all LTC6804s (broadcast command)
+    conversionStart_ms = millis();
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
+#else
 //tell all MAX17843 ICs to measure all cells
 //  (private method)
 void startMAX17843CellConversion(void)
@@ -55,11 +60,14 @@ digitalWrite(PIN_LASIG, HIGH);//WGCToDo: temporary debugging statement
       TOTAL_IC,
       M873_SCANCTRL_INIT | BITVALUE(M873_SCANCTRL_SCAN),
       MCONT_FEW_PRTX);
+    conversionStart_ms = millis();
 digitalWrite(PIN_LASIG, LOW); // #6 WGCToDo: temporary debugging statement
 }
+#endif
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
+#ifdef BMS_TYPE_LiBCM
 //Read a single 8 byte CVR and store the result in *data
 //This function is ONLY used by validateAndStoreNextCVR().
 //  (private method)
@@ -152,6 +160,7 @@ void validateAndStoreNextCVR(uint8_t chipAddress, char cellVoltageRegister)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
+#else
 //Validate specified MAX17843 cell readings
 //store valid cell voltages in cellVoltages_counts[][]
 //  (private method)
@@ -193,6 +202,7 @@ void validateAndStoreNextMAX17843(uint8_t chipAddress)
         temperature_ModuleDie_setLatest_counts(chipAddress, rawDieTemp);
     }
 }
+#endif
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -246,11 +256,15 @@ void processAllCellVoltages(void)
     {
         for (int cell=0; cell < CELLS_PER_IC; cell++) //actual LTC cell number: 'cell' + 1 (zero-indexed)
         {
+          #ifdef BMS_TYPE_LiBCM
+            uint16_t cellVoltageUnderTest = cellVoltages_counts[chip][cell];
+          #else
             //WGCToDo: the floating multiply could be replaced by a faster integer multiply then right shift
             //WGCToDo:    x * 0.762939 -> ((x * 49) >> 6) [0.35% error)
             //WGCToDo:   see "Mult>> Finder" tab in Motherboard/RevC/V&V/OEM Current Sensor.ods
             //WGCToDo: Maybe do fast/close while key-on, and slow/accurate while key-off?
             uint16_t cellVoltageUnderTest = (uint16_t)((float)cellVoltages_counts[chip][cell] * MAX17873_CONVERSION_TO_100uV_per_bit) ;
+          #endif
 
             //accumulate Vpack
             packVoltage_RAW += cellVoltageUnderTest;
@@ -329,6 +343,8 @@ bool LTC68042cell_nextVoltages(void)
         static uint8_t chipAddress = FIRST_IC_ADDR;
         static char cellVoltageRegister = 'A'; //LTC68042 contains QTY4 CVRs (A/B/C/D)
 
+        //wait for current conversion to complete (should not usually be necessary)
+        while (LTC6804_MAX_CONVERSION_TIME_ms > (millis() - conversionStart_ms)) { ; }
         validateAndStoreNextCVR(chipAddress, cellVoltageRegister);
 
         //determine which LTC68042 IC & CVR to read next
@@ -349,6 +365,8 @@ bool LTC68042cell_nextVoltages(void)
         }
       #else
         static uint8_t chipAddress = 0;
+        //wait for current conversion to complete (should not usually be necessary)
+        while (LTC6804_MAX_CONVERSION_TIME_ms > (millis() - conversionStart_ms)) { ; }
         // for MAX17843 BMS, do 12 cells at a time
         validateAndStoreNextMAX17843(chipAddress);
         if (++chipAddress >= (TOTAL_IC)) {
