@@ -240,7 +240,7 @@
   #define M873_DIAGCFG                   0x51 //=========== register address
   // DIAGCFG register bit positions
   #define M873_DIAGCFG_bfCTSTDAC_SHIFT     12
-  #define M873_DIAGCFG_bfCTSTDAC_SIZE        12
+  #define M873_DIAGCFG_bfCTSTDAC_SIZE         4
   #define M873_DIAGCFG_CTSTSRC             11
   //#define M873_DIAGCFG_Reserved            10
   #define M873_DIAGCFG_bfAUXINTSTEN_SHIFT   8
@@ -270,5 +270,37 @@
 
   // Can be used for clearing flags...
   #define M873_CLEAR_ALL                    0
+
+    //Acquisition time calculations
+    // MAX17843 Table 10. Acquisition Time
+    //                                            (uSec)           c: config file constant, d run-time dynamic
+    // Once per acquisition: --------------------------------------------------------------------------
+    //  C5: Initialization                         13                c Always
+    // Every measurement cycle: -----------------------------------------------------------------------
+    //  C6: VBLKP measurement                      27                c (G34) If VBLKP is enabled
+    //  C7: Cell scan setup                        12.5              c (G34) If cell input(s) enabled and VBLKP enabled
+    //  C8: Cell scan setup                        20                c (G34) If cell input(s) enabled and VBLKP disabled
+    //  C9: Cell scans (per enabled cell)           9 x n            c (C34) For n = Number of enabled cell inputs
+    // C13: Diagnostic measurement (if enabled)    86.2              c (H34) If die temperature diagnostic enabled
+    // Once per acquisition: --------------------------------------------------------------------------
+    // C15: AUXIN measurement (if enabled)         10                c (D34 or E34) If AUXINx is enabled
+    // C16: AUXIN measurement (if enabled)        106 x AINTIME[5:0] c (F34) (D34 or E34) If AUXINx is enabled
+    // xxxx: Cell recovery time                    96 x (CRT + 1)    ? if AUTOBALSWDIS is enabled
+    //                                                               c   CRT if DELAYSEL is 0, DRT if 1
+    // After every measurement cycle except the last: -------------------------------------------------
+    // C19: HV recovery (if oversampling enabled) 100.3 x m          d (I34) For m = Number of oversamples
+
+    //=C5+IF(D34,C15+C16*F34)+IF(E34,C17+C18*F34)+I34*(IF(G34,C6+C7,C8)+C34*C9+H34*C13)+(I34-1)*C19
+
+    #define M873_ACGTime_Initialization_us          13
+    #define M873_ACGTime_VBLKP_measurement_us       27
+    #define M873_ACGTime_CellScanSetupVb_us         12.5
+    #define M873_ACGTime_CellScanSetupNoVb_us       20
+    #define M873_ACGTime_CellScansPerCell_us         9
+    #define M873_ACGTime_DieTempMeasure_us          86.2
+    #define M873_ACGTime_AUXINMeasurement_us         10
+    #define M873_ACGTime_AUXINDelayPerCount_us        6
+    #define M873_ACGTime_CellRecoveryTimePerCount_us 96
+    #define M873_ACGTime_HVRecoveryPerOversmpl_us   100.3
 
 #endif

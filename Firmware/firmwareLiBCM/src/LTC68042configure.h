@@ -37,6 +37,13 @@
     #define CELLS_PER_IC  12 //Each MAX17843 measures QTY12 cells
   #endif
 
+    //Acquisition time vs measurement accuracy trade-off
+    // ACQ_REASONABLE_AND_FAST for time sensitive operation (key-on)
+    // ACQ_MOST_ACCURATE_BUT_SLOWER for when time is less important, but better accuracy is helpful (key-off)
+    #define ACQ_REASONABLE_AND_FAST       0
+    #define ACQ_MOST_ACCURATE_BUT_SLOWER  1
+
+    //============== LTC6804 specific defines
     #define SPECIFIED_MAX_WAKEUP_TIME_LTCCORE_MICROSECONDS 300 //guarantees LTC6804 is in 'standby' mode (tWake = 300 us max)
     #define SPECIFIED_MAX_WAKEUP_TIME_isoSPI_MICROSECONDS   10 //guarantees isoSPI is in 'ready' mode (tWAKE = 10 us max)
 
@@ -187,6 +194,8 @@
 
     #define LTC6804_MASK_REFON_BIT 0x02
 
+    //============== end of LTC6804 specific defines, start of MAX17841
+
     // MAX17841 RX_INTERRUPT_ENABLE register bit value config defaults. "0b1" enables, "0b0" disables
     #define M871_RX_INTEN_INIT_RX_ERROR_INT_ENABLE    0b1 // Interrupt enable for RX_Error_Status
     #define M871_RX_INTEN_INIT_RX_BUSY_INT_ENABLE     0b0 // Interrupt enable for RX_Busy_Status
@@ -281,6 +290,7 @@
       (M873_MEASUREEN_INIT_BLKCONNECT << M873_MEASUREEN_BLKCONNECT    )
 
     // MAX17843 SCANCTRL register bit value config defaults. "0b1" enables, "0b0" disables
+    //   M873_SCANCTRL_INIT_OVSAMPL is adjusted for Acquisition time vs measurement accuracy trade-off
     #define M873_SCANCTRL_INIT_SCANDONE            0b0
     #define M873_SCANCTRL_INIT_SCANTIMEOUT         0b0
     #define M873_SCANCTRL_INIT_DATARDY             0b0
@@ -316,8 +326,33 @@
       (M873_ACQCFG_INIT_AINTIME  << M873_ACQCFG_bfAINTIME_SHIFT ) + \
       (M873_ACQCFG_INIT_THRMMODE << M873_ACQCFG_bfTHRMMODE_SHIFT)
 
-    #define LTC6804_CORE_ALREADY_AWAKE true
-    #define LTC6804_CORE_JUST_WOKE_UP  false
+    // MAX17843 DIAGCFG register bit value config defaults
+    #define M873_DIAGCFG_INIT_bfCTSTDAC    0b0000
+    #define M873_DIAGCFG_INIT_CTSTSRC         0b0
+    #define M873_DIAGCFG_INIT_bfAUXINTSTEN    0b0
+    #define M873_DIAGCFG_INIT_MUXDIAGBUS      0b0
+    #define M873_DIAGCFG_INIT_MUXDIAGPAIR     0b0
+    #define M873_DIAGCFG_INIT_MUXDIAGEN       0b0
+    #define M873_DIAGCFG_INIT_ALTMUXSEL       0b0
+    #define M873_DIAGCFG_INIT_bfDIAGSEL   M873_DIAGSEL_DieTemperature
+
+    #define M873_DIAGCFG_INIT \
+      (M873_DIAGCFG_INIT_bfCTSTDAC     << M873_DIAGCFG_bfCTSTDAC_SHIFT   ) + \
+      (M873_DIAGCFG_INIT_CTSTSRC       << M873_DIAGCFG_CTSTSRC           ) + \
+      (M873_DIAGCFG_INIT_bfAUXINTSTEN  << M873_DIAGCFG_bfAUXINTSTEN_SHIFT) + \
+      (M873_DIAGCFG_INIT_MUXDIAGBUS    << M873_DIAGCFG_MUXDIAGBUS        ) + \
+      (M873_DIAGCFG_INIT_MUXDIAGPAIR   << M873_DIAGCFG_MUXDIAGPAIR       ) + \
+      (M873_DIAGCFG_INIT_MUXDIAGEN     << M873_DIAGCFG_MUXDIAGEN         ) + \
+      (M873_DIAGCFG_INIT_ALTMUXSEL     << M873_DIAGCFG_ALTMUXSEL         ) + \
+      (M873_DIAGCFG_INIT_bfDIAGSEL     << M873_DIAGCFG_bfDIAGSEL_SHIFT   )
+
+    // MAX17843 ADR register bit value config defaults
+    #define M873_ADR_INIT_bfDIAG_RECOVERY_TIME 0x00
+    #define M873_ADR_INIT_bfCELL_RECOVERY_TIME 0x00
+
+    #define M873_ADR_INIT \
+      (M873_ADR_INIT_bfDIAG_RECOVERY_TIME << M873_ADR_bfDIAG_RECOVERY_TIME_SHIFT) + \
+      (M873_ADR_INIT_bfCELL_RECOVERY_TIME << M873_ADR_bfCELL_RECOVERY_TIME_SHIFT)
 
     static const uint8_t crc8Table[256] = {
       0x00, 0x3e, 0x7c, 0x42, 0xf8, 0xc6, 0x84, 0xba,
@@ -411,6 +446,7 @@
     void LTC68042configure_setBalanceResistors(uint8_t icAddress, uint16_t cellBitmap, uint8_t softwareTimeout);
     bool LTC68042configure_doesActualPackSizeMatchUserConfig(void);
     void LTC68042configure_pulseChipSelectLow(uint16_t lowPulsePeriod_us);
+    void LTC68042configure_acqusitionAccuracy_set(bool acqAccuracyTradeoff);
     void MAX17841configure_enableMAX17841(void);
     void MAX17841configure_disableMAX17841(void);
     void LTC68042configure_enabletestDischargeFETs(void);

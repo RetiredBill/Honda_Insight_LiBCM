@@ -20,10 +20,16 @@
 #else
   uint32_t lastMAX1784xTimestamp_millis = 0; // for optimizing delays
 #endif
+bool configuureAcqAccuracyTradeoff = ACQ_REASONABLE_AND_FAST;
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-void MAX17841configure_enableMAX17841(void) {
+void LTC68042configure_acqusitionAccuracy_set(bool acqAccuracyTradeoff) { configuureAcqAccuracyTradeoff = acqAccuracyTradeoff; }
+
+/////////////////////////////////////////////////////////////////////////////////////////
+
+void MAX17841configure_enableMAX17841(void)
+{
   #ifdef BMS_TYPE_WGCLiBCM
     digitalWrite(PIN_SHDNL_MAX17841, HIGH); // Enable MAX17841
     lastMAX1784xTimestamp_millis = millis(); // will need to do t_startup delay
@@ -32,12 +38,69 @@ void MAX17841configure_enableMAX17841(void) {
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-void MAX17841configure_disableMAX17841(void) {
+void MAX17841configure_disableMAX17841(void)
+{
   #ifdef BMS_TYPE_WGCLiBCM
     digitalWrite(PIN_SHDNL_MAX17841, LOW); // disable MAX17841
     lastMAX1784xTimestamp_millis = millis(); // will need to do t_shutdown delay
   #endif
 }
+
+/////////////////////////////////////////////////////////////////////////////////////////
+
+uint16_t MAX17841configure_calcAcquisitionTime_us(
+  uint8_t NumCells, bool Ain1En, bool Ain2En, uint8_t AinTime_counts, bool VblkEn, uint8_t DiagSel, uint8_t OvrSmpls,
+  bool AutoBalSwDisEn, uint8_t CellRecoveryTime_counts)
+{
+    //WGCToDoLater: Many arguments will likely end up never changing.
+    // They could be deleted from the argument list, and replaced in the formula
+    //   with the following, allowing constant definitions to replace run-time calculations
+    // uint8_t NumCells:        CELLS_PER_IC
+    // bool Ain1En:             M873_MEASUREEN_INIT_AIN1EN
+    // bool Ain2En:             M873_MEASUREEN_INIT_AIN2EN
+    // uint8_t AinTime_counts:  M873_ACQCFG_INIT_AINTIME
+    // bool VblkEn:             M873_MEASUREEN_INIT_BLOCKEN
+    // uint8_t DiagSel:         (BFN_GET(M873_DIAGCFG_bfDIAGSEL, M873_DIAGCFG_INIT))
+    // uint8_t OvrSmpls:        M873_SCANCTRL_INIT_OVSAMPL
+    // bool AutoBalSwDisEn:     M873_SCANCTRL_INIT_AUTOBALSWDIS
+    // uint8_t CellRecoveryTime_counts: (BFN_GET(M873_ADR_bfCELL_RECOVERY_TIME, M873_ADR_INIT))
+
+    return M873_ACGTime_Initialization_us \
+      + (Ain1En ? (M873_ACGTime_AUXINMeasurement_us + (M873_ACGTime_AUXINDelayPerCount_us * AinTime_counts)) : 0) \
+      + (Ain2En ? (M873_ACGTime_AUXINMeasurement_us + (M873_ACGTime_AUXINDelayPerCount_us * AinTime_counts)) : 0) \
+      + OvrSmpls \
+         * (   (VblkEn ? (M873_ACGTime_VBLKP_measurement_us + M873_ACGTime_CellScanSetupVb_us) : M873_ACGTime_CellScanSetupNoVb_us) \
+             + (NumCells * M873_ACGTime_CellScansPerCell_us) \
+             + ((DiagSel == M873_DIAGSEL_DieTemperature) ? M873_ACGTime_DieTempMeasure_us : 0) \
+           ) \
+      + M873_ACGTime_HVRecoveryPerOversmpl_us * (OvrSmpls - 1) \
+      + (AutoBalSwDisEn ?  (M873_ACGTime_CellRecoveryTimePerCount_us * (CellRecoveryTime_counts + 1)) : 0);
+}
+
+#if 0
+// helper to validate MAX17841configure_calcAcquisitionTime_us()
+void MAX17841configure_test_calcAcquisitionTime_us(void){
+    Serial.println(F("\n Acquisition Times:"));
+    Serial.print(MAX17841configure_calcAcquisitionTime_us(CELLS_PER_IC,0,0,0,0,0,1,0,0)); Serial.println(F(" == 141?"));//worked
+    Serial.print(MAX17841configure_calcAcquisitionTime_us(CELLS_PER_IC,0,0,0,1,0,1,0,0)); Serial.println(F(" == 160.5?"));//worked
+    Serial.print(MAX17841configure_calcAcquisitionTime_us(CELLS_PER_IC,1,1,0,0,0,1,0,0)); Serial.println(F(" == 161?"));//worked
+    Serial.print(MAX17841configure_calcAcquisitionTime_us(CELLS_PER_IC,1,1,0,1,0,1,0,0)); Serial.println(F(" == 180.5?"));//worked
+    Serial.print(MAX17841configure_calcAcquisitionTime_us(CELLS_PER_IC,1,1,0,1,M873_DIAGSEL_DieTemperature,1,0,0)); Serial.println(F(" == 266.7?"));//worked
+    Serial.print(MAX17841configure_calcAcquisitionTime_us(CELLS_PER_IC,0,0,0,0,0,4,0,0)); Serial.println(F(" == 825.9?"));//worked
+    Serial.print(MAX17841configure_calcAcquisitionTime_us(CELLS_PER_IC,0,0,0,1,0,4,0,0)); Serial.println(F(" == 903.9?"));//worked
+    Serial.print(MAX17841configure_calcAcquisitionTime_us(CELLS_PER_IC,1,1,0,0,0,4,0,0)); Serial.println(F(" == 845.9?"));//worked
+    Serial.print(MAX17841configure_calcAcquisitionTime_us(CELLS_PER_IC,1,1,0,1,0,4,0,0)); Serial.println(F(" == 923.9?"));//worked
+    Serial.print(MAX17841configure_calcAcquisitionTime_us(CELLS_PER_IC,1,1,0,1,M873_DIAGSEL_DieTemperature,4,0,0)); Serial.println(F(" == 1268.7?"));//worked
+    Serial.print(MAX17841configure_calcAcquisitionTime_us(CELLS_PER_IC,1,1,1,1,M873_DIAGSEL_DieTemperature,4,0,0)); Serial.println(F(" == 1280.7?"));//worked
+    Serial.print(MAX17841configure_calcAcquisitionTime_us(CELLS_PER_IC,0,0,0,0,0,8,0,0)); Serial.println(F(" == 1739.1?"));//worked
+    Serial.print(MAX17841configure_calcAcquisitionTime_us(CELLS_PER_IC,1,1,0,0,0,8,0,0)); Serial.println(F(" == 1759.1?"));//worked
+    Serial.print(MAX17841configure_calcAcquisitionTime_us(CELLS_PER_IC,1,1,0,1,0,8,0,0)); Serial.println(F(" == 1915.1?"));//worked
+    Serial.print(MAX17841configure_calcAcquisitionTime_us(CELLS_PER_IC,1,1,0,1,M873_DIAGSEL_DieTemperature,8,0,0)); Serial.println(F(" == 2604.7?"));//worked
+    Serial.print(MAX17841configure_calcAcquisitionTime_us(CELLS_PER_IC,1,1,1,1,M873_DIAGSEL_DieTemperature,4,0,0)); Serial.println(F(" == 1280.7?"));//worked
+    Serial.print(MAX17841configure_calcAcquisitionTime_us(CELLS_PER_IC,1,1,1,1,M873_DIAGSEL_DieTemperature,16,0,0)); Serial.println(F(" == 5288.7?"));//worked
+    Serial.print(MAX17841configure_calcAcquisitionTime_us(CELLS_PER_IC,0,0,0,0,0,16,0,0)); Serial.println(F(" == 3565.5?"));//worked
+}
+#endif
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -144,6 +207,7 @@ void LTC68042configure_programVolatileDefaults(void)
         //Note: fast, normal, or slow is configured in ADCV command
 
     LTC68042configure_writeConfigRegisters(BROADCAST_TO_ALL_ICS);
+    LTC68042cell_dischargeAllowedDuringConversion_set(IS_DISCHARGE_ALLOWED_DURING_CONVERSION);
   #else
     // Compared to BMS_TYPE_WGCLiBCM, LiBCM version of this is relatively fast (12 SPI bytes => 384us @ 32us/byte),
     //   whereas for BMS_TYPE_WGCLiBCM, wakeup() alone takes ~4.3ms! Total is ~6.8ms
@@ -457,7 +521,6 @@ void testHelper_clearCellTestFlags(int16_t testFlagBitmap[])
 //helper for optimized acquisition of cell volatges
 //  (LTC68042cell_acquireAllCellVoltages() might do 2 aquisitions when only 1 is required)
 // Note: this scheme is only optimum when used inside of a single blocking test function
-//WGCToDoNow: there may be an issue of not waiting for acquisition complete?
 void testHelper_finishInProcessAcquision(void)
 {
     if (LTC68042cell_nextVoltages() != CELL_DATA_PROCESSED)
@@ -470,7 +533,6 @@ void testHelper_finishInProcessAcquision(void)
     //and we can hold right there, as long as this is only called within a single blocking test routine
 }
 
-//WGCToDoNow: there may be an issue of not waiting for acquisition complete?
 void testHelper_acquireAllCellVoltages(void)
 {
     while (LTC68042cell_nextVoltages() != CELL_DATA_PROCESSED) { ; } //gather new data
@@ -694,12 +756,14 @@ bool LTC68042configure_basicConfidenceTest(void)
     //note test start time
     latestStateTimestamp_ms = millis();
 
+    //set up test
     testHelper_clearCellTestFlags(test1_cellStatusBitmap); // re-use some available statics
     testHelper_clearCellTestFlags(test2_cellStatusBitmap); // re-use some available statics
     uint16_t test3_EvenTestCellFailsHighBitmap[TOTAL_IC] = {0};
     uint16_t test4_EvenTestCellFailsLowBitmap[TOTAL_IC] = {0};
     uint16_t test5_OddTestCellFailsHighBitmap[TOTAL_IC] = {0};
     uint16_t test6_OddTestCellFailsLowBitmap[TOTAL_IC] = {0};
+    LTC68042cell_dischargeAllowedDuringConversion_set(DCP_ENABLED);
 
     //verify LTC68042result_errorCount_get() doesn't increase during test
     uint8_t errorCounts = LTC68042result_errorCount_get();
@@ -713,7 +777,6 @@ bool LTC68042configure_basicConfidenceTest(void)
     testHelper_saveCellVoltages();
 
     //================== now do even cells
-    //WGCToDoNow: IS_DISCHARGE_ALLOWED_DURING_CONVERSION needs to be DCP_ENABLED during LTC68042configure_basicConfidenceTest, but it isn't
     testHelper_setCellDischarge(TESTDISCHASRGE_EvenCellsBitMap);
 
     //measure and check while even cells are discharging
@@ -753,6 +816,7 @@ bool LTC68042configure_basicConfidenceTest(void)
     //test is done
     uint32_t now_ms = millis();
     errorCounts -= LTC68042result_errorCount_get();
+    LTC68042cell_dischargeAllowedDuringConversion_set(IS_DISCHARGE_ALLOWED_DURING_CONVERSION);
 
     Serial.print(F("\n+Basic BMC circuit test"));
     Serial.print(F("\n   Acquisition errors: "));
@@ -839,8 +903,10 @@ if (testDischargeState != TESTDISCHASRGESTATE_DISABLED) { //WGCToDo: debugging o
 
     if (testDischargeState == TESTDISCHASRGESTATE_TURNON)
     {
+        //set up test
         testHelper_clearCellTestFlags(test1_cellStatusBitmap);
         testHelper_clearCellTestFlags(test2_cellStatusBitmap);
+        LTC68042cell_dischargeAllowedDuringConversion_set(DCP_ENABLED);
 
         //tell the world that cells are balancing
         cellBalance_set_cellsAreBalancing(YES);
@@ -963,6 +1029,8 @@ if (testDischargeState != TESTDISCHASRGESTATE_DISABLED) { //WGCToDo: debugging o
 
         //tell the world that cells are no longer balancing
         cellBalance_set_cellsAreBalancing(NO);
+
+        LTC68042cell_dischargeAllowedDuringConversion_set(IS_DISCHARGE_ALLOWED_DURING_CONVERSION);
 
         uint32_t now_ms = millis();
 

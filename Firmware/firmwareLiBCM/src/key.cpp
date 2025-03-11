@@ -31,6 +31,7 @@ void key_handleKeyEvent_off(void)
     //LTC68042configure_communicationTest(); //WGCToDo: just an idea
     //   Note: For BMS_TYPE_WGCLiBCM, this is also (of necesity) done when the BMS wakes up
     LTC68042configure_doesActualPackSizeMatchUserConfig();
+    LTC68042configure_acqusitionAccuracy_set(ACQ_MOST_ACCURATE_BUT_SLOWER);
     //LTC68042configure_VrefTest(); //WGCToDo: just an idea (haven't looked at what this entails)
     //LTC68042result_saneVoltagesTest(); //WGCToDo: just an idea
     //WGCToDoNow: deal appropriately with failure of LTC68042configure_basicConfidenceTest()
@@ -63,6 +64,7 @@ void key_handleKeyEvent_on(void)
     BATTSCI_enable();
     METSCI_enable();
     gpio_turnPowerSensors_on();
+    LTC68042configure_acqusitionAccuracy_set(ACQ_REASONABLE_AND_FAST);
     LTC68042configure_programVolatileDefaults(); //turn discharge resistors off, set ADC LPF, etc.
     LTC68042configure_handleKeyStateChange();
     vPackSpoof_handleKeyON();

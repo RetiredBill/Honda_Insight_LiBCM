@@ -25,5 +25,6 @@
 
     bool LTC68042cell_nextVoltages(void);
     void LTC68042cell_acquireAllCellVoltages(void);
+    void LTC68042cell_dischargeAllowedDuringConversion_set(bool dcpState);
 
 #endif
