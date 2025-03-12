@@ -38,10 +38,10 @@
   #endif
 
     //Acquisition time vs measurement accuracy trade-off
-    // ACQ_REASONABLE_AND_FAST for time sensitive operation (key-on)
-    // ACQ_MOST_ACCURATE_BUT_SLOWER for when time is less important, but better accuracy is helpful (key-off)
-    #define ACQ_REASONABLE_AND_FAST       0
-    #define ACQ_MOST_ACCURATE_BUT_SLOWER  1
+    // ACQ_REASONABLY_PRECISE_AND_FASTER for time sensitive operation (key-on)
+    // ACQ_MOST_PRECISE_BUT_SLOWER for when time is less important, but better accuracy is helpful (key-off)
+    #define ACQ_REASONABLY_PRECISE_AND_FASTER  0
+    #define ACQ_MOST_PRECISE_BUT_SLOWER        1
 
     //============== LTC6804 specific defines
     #define SPECIFIED_MAX_WAKEUP_TIME_LTCCORE_MICROSECONDS 300 //guarantees LTC6804 is in 'standby' mode (tWake = 300 us max)
@@ -413,10 +413,30 @@
       */
   #endif
 
-    //basic cell discharge circuit test
-    #define TESTBASIC_DELTA_TESTLIMIT_counts  20 //WGCToDoNow: this limit surely needs refinement, and likely won't work in BMS_TYPE_WGCLiBCM at all
+    //======================= Basic cell discharge circuit test
+    // This quick test first aims to detect open BMS sense wires by
+    //   verifying that cell voltages measure within sane limits while
+    //   the cell balance circuits are active.
+    // Sane cell voltage high limit (while cell balance circuit is active):
+    //   a measured cell voltage above this value is "not sane", and
+    //   probably indicates an open BMS sense wire
+    #define TESTBASIC_SANE_HIGH_TESTLIMIT_counts   CELL_VMAX_REGEN
+    // Sane cell voltage low limit (while cell balance circuit is active):
+    //   a measured cell voltage below this value is "not sane", and
+    //   probably (also) indicates an open BMS sense wire
+    #define TESTBASIC_SANE_LOW_TESTLIMIT_counts    CELL_VMIN_GRIDCHARGER
+    // Next, the test attempts verify that the cell discharge circuits
+    //   actually draw current by measuring the IR drop in the BMS sense
+    //   wires and connections.
+    // Cells with a voltage delta below this limit either aren't drawing
+    //   current or are always drawing current. Either way there is a
+    //   BMS discharge circuit failure.
+    //   Another possibility is that they have anomalously low
+    //   cable/wire/connection resistance (deemed unlikely).
+    // cell voltage delta limit:
+    #define TESTBASIC_DELTA_TESTLIMIT_counts  30 //WGCToDoNow: this limit surely needs refinement, and likely won't work in BMS_TYPE_WGCLiBCM at all
 
-    // testDischargeFETs defines
+    //======================= testDischargeFETs defines
     #define TESTDISCHASRGE_EvenCellsBitMap 0b0000010101010101
     #define TESTDISCHASRGE_OddCellsBitMap  0b0000101010101010
     #define TESTDISCHASRGE_DeltaVSep_THRESHOLD_counts   80
@@ -446,9 +466,13 @@
     void LTC68042configure_setBalanceResistors(uint8_t icAddress, uint16_t cellBitmap, uint8_t softwareTimeout);
     bool LTC68042configure_doesActualPackSizeMatchUserConfig(void);
     void LTC68042configure_pulseChipSelectLow(uint16_t lowPulsePeriod_us);
-    void LTC68042configure_acqusitionAccuracy_set(bool acqAccuracyTradeoff);
+    bool LTC68042configure_acqusitionPrecision_get(void);
+    void LTC68042configure_acqusitionPrecision_set(bool acqAccuracyTradeoff);
     void MAX17841configure_enableMAX17841(void);
     void MAX17841configure_disableMAX17841(void);
     void LTC68042configure_enabletestDischargeFETs(void);
     uint8_t LTC68042configure_testDischargeFETs(void);
     bool LTC68042configure_basicConfidenceTest(void);
+    uint16_t MAX17841configure_calcAcquisitionTime_us(
+    uint8_t NumCells, bool Ain1En, bool Ain2En, uint8_t AinTime_counts, bool VblkEn, uint8_t DiagSel, uint8_t OvrSmpls,
+      bool AutoBalSwDisEn, uint8_t CellRecoveryTime_counts);

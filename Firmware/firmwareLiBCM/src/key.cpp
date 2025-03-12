@@ -22,30 +22,33 @@ void key_handleKeyEvent_off(void)
     BATTSCI_disable(); //Must disable BATTSCI when key is off to prevent backdriving MCM
     METSCI_disable();
 
-    // key-off event quick self-test suite (part of BIST)
-    //   All tests need to be quick, with a total elapsed time of less than XXX (a second or 2)
-    //   Will be run on every key-off event
-    //   Ordered by "fundamental-ity" (most fundamental first)
-    //   Any test failure is fatal
-    //JTS2doLater: Add built-in test suite, including VREF, VCELL, Balancing, temp verify (batt and OEM), etc.
-    //LTC68042configure_communicationTest(); //WGCToDo: just an idea
-    //   Note: For BMS_TYPE_WGCLiBCM, this is also (of necesity) done when the BMS wakes up
-    LTC68042configure_doesActualPackSizeMatchUserConfig();
-    LTC68042configure_acqusitionAccuracy_set(ACQ_MOST_ACCURATE_BUT_SLOWER);
-    //LTC68042configure_VrefTest(); //WGCToDo: just an idea (haven't looked at what this entails)
-    //LTC68042result_saneVoltagesTest(); //WGCToDo: just an idea
-    //WGCToDoNow: deal appropriately with failure of LTC68042configure_basicConfidenceTest()
-    LTC68042configure_basicConfidenceTest();
-    //temperature_thermistorTest(); //WGCToDo: just an idea
-    eeprom_keyOffCheckForExpiredFirmware();
-
     // key off state operational startup
+  #ifdef BMS_TYPE_WGCLiBCM
+    //acqusition parameter tweaks /could/ be applied to BMS_TYPE_LiBCM for lower noise, but is not coded, and may not be beneficial
+    LTC68042configure_acqusitionPrecision_set(ACQ_MOST_PRECISE_BUT_SLOWER);
+  #endif
     LTC68042cell_acquireAllCellVoltages();
     SoC_updateUsingLatestOpenCircuitVoltage(); //JTS2doLater: Add ten minute delay before VoC->SoC LUT
     adc_calibrateBatteryCurrentSensorOffset(DEBUG_TEXT_ENABLED);
     gpio_turnPowerSensors_off();
     LTC68042configure_handleKeyStateChange();
     vPackSpoof_handleKeyOFF();
+    //JTS2doLater: Add built-in test suite, including VREF, VCELL, Balancing, temp verify (batt and OEM), etc.
+    eeprom_keyOffCheckForExpiredFirmware();
+    // Note: For BMS_TYPE_WGCLiBCM, checking for pack size is also (of necesity) done when the BMS wakes up
+    LTC68042configure_doesActualPackSizeMatchUserConfig();
+
+    // key-off event quick self-test suite (part of BIST)
+    //   All tests need to be quick, with a total elapsed time of less than XXX (a second or 2)
+    //   Will be run on every key-off event
+    //   Ordered by "fundamental-ity" (most fundamental first)
+    //   Any test failure is fatal
+    //LTC68042configure_communicationTest(); //WGCToDo: just an idea
+    //LTC68042configure_VrefTest(); //WGCToDo: just an idea (haven't looked at what this entails)
+    //LTC68042result_saneVoltagesTest(); //WGCToDo: just an idea
+    //WGCToDoNow: deal appropriately with failure of LTC68042configure_basicConfidenceTest()
+    LTC68042configure_basicConfidenceTest();
+    //temperature_thermistorTest(); //WGCToDo: just an idea
 
     // enable longer running key-off tests (more BIST)
     //   non-blocking
@@ -64,7 +67,9 @@ void key_handleKeyEvent_on(void)
     BATTSCI_enable();
     METSCI_enable();
     gpio_turnPowerSensors_on();
-    LTC68042configure_acqusitionAccuracy_set(ACQ_REASONABLE_AND_FAST);
+  #ifdef BMS_TYPE_WGCLiBCM
+    LTC68042configure_acqusitionPrecision_set(ACQ_REASONABLY_PRECISE_AND_FASTER);
+  #endif
     LTC68042configure_programVolatileDefaults(); //turn discharge resistors off, set ADC LPF, etc.
     LTC68042configure_handleKeyStateChange();
     vPackSpoof_handleKeyON();

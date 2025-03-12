@@ -20,11 +20,12 @@
 #else
   uint32_t lastMAX1784xTimestamp_millis = 0; // for optimizing delays
 #endif
-bool configuureAcqAccuracyTradeoff = ACQ_REASONABLE_AND_FAST;
+bool configuureAcqPrecisionTradeoff = ACQ_REASONABLY_PRECISE_AND_FASTER;
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-void LTC68042configure_acqusitionAccuracy_set(bool acqAccuracyTradeoff) { configuureAcqAccuracyTradeoff = acqAccuracyTradeoff; }
+void LTC68042configure_acqusitionPrecision_set(bool acqAccuracyTradeoff) { configuureAcqPrecisionTradeoff = acqAccuracyTradeoff; }
+bool LTC68042configure_acqusitionPrecision_get(void)                     { return configuureAcqPrecisionTradeoff; }
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -162,9 +163,9 @@ void LTC68042configure_setBalanceResistors(uint8_t icAddress, uint16_t cellBitma
   #else
     //WGCToDo: softwareTimeout is LTC6804_DISCHARGE_TIMEOUT_02_SECONDS, which is 0! (as of 2/9/25)
     // Set up watchdog timer for 2 sec
-    MAX1784Xcomms_writeDev843Reg(M873_TIMERCFG, icAddress, (BFN_GET(M873_TIMERCFG_bfCBPDIV, 1) | BFN_GET(M873_TIMERCFG_bfCBTIMER, 2)), MCONT_FULL_CHECKS);
+    MAX1784Xcomms_writeDev843Reg(M873_TIMERCFG, icAddress, (BFN_PREP(M873_TIMERCFG_bfCBPDIV, 1) | BFN_PREP(M873_TIMERCFG_bfCBTIMER, 2)), MCONT_FULL_CHECKS);
     //set cell switch bits
-    MAX1784Xcomms_writeDev843Reg(M873_BALSWEN, icAddress, BFN_GET(M873_BALSWEN_bfBALSWEN, cellBitmap), MCONT_FULL_CHECKS);
+    MAX1784Xcomms_writeDev843Reg(M873_BALSWEN, icAddress, BFN_PREP(M873_BALSWEN_bfBALSWEN, cellBitmap), MCONT_FULL_CHECKS);
     //WGCToDo: might be time for a shadow register...
     if (cellBitmap) {
       // then enable cell balance (clear DEVCFG1.BALSWDISABLE)
@@ -521,13 +522,14 @@ void testHelper_clearCellTestFlags(int16_t testFlagBitmap[])
 //helper for optimized acquisition of cell volatges
 //  (LTC68042cell_acquireAllCellVoltages() might do 2 aquisitions when only 1 is required)
 // Note: this scheme is only optimum when used inside of a single blocking test function
+//WGCToDoNow: change this to access LTC68042cell_nextVoltages state without kicking off another acquisition
 void testHelper_finishInProcessAcquision(void)
 {
     if (LTC68042cell_nextVoltages() != CELL_DATA_PROCESSED)
     {
         // then an acquisition is already underway,
         // but can't be certain of operating condions. so...
-        Serial.print(F("w"));//WGCToDoNow: debug only
+Serial.print(F(" fw"));//WGCToDoNow: debug only
         while (LTC68042cell_nextVoltages() != CELL_DATA_PROCESSED) { ; } //clear old data
     }
     //and we can hold right there, as long as this is only called within a single blocking test routine
@@ -536,8 +538,8 @@ void testHelper_finishInProcessAcquision(void)
 void testHelper_acquireAllCellVoltages(void)
 {
     while (LTC68042cell_nextVoltages() != CELL_DATA_PROCESSED) { ; } //gather new data
-    //for (uint8_t ic = 0; ic < TOTAL_IC; ic++) debugUSB_printOneICsCellVoltages( ic, FOUR_DECIMAL_PLACES);//WGCToDoNow: debug only
-    //Serial.println("");//WGCToDoNow: debug only
+for (uint8_t ic = 0; ic < TOTAL_IC; ic++) debugUSB_printOneICsCellVoltages( ic, FOUR_DECIMAL_PLACES);//WGCToDoNow: debug only
+Serial.println("");//WGCToDoNow: debug only
 }
 
 //helper function to set up a cell discharge circuit test
@@ -581,12 +583,12 @@ bool testHelper_checkInterCellDeltaAndSaneCellVoltages(
     {
         for (uint8_t cellNumber = 0 ; cellNumber < CELLS_PER_IC; cellNumber++)
         {
-            if (CELL_VMAX_REGEN < cellVoltagesTest_counts[ic][cellNumber])
+            if (TESTBASIC_SANE_HIGH_TESTLIMIT_counts < cellVoltagesTest_counts[ic][cellNumber])
             {
                 //then this cell fails high
                 cellFailsHighBitmap[ic] |= (1 << cellNumber);
             }
-            else if (CELL_VMIN_GRIDCHARGER > cellVoltagesTest_counts[ic][cellNumber])
+            else if (TESTBASIC_SANE_LOW_TESTLIMIT_counts > cellVoltagesTest_counts[ic][cellNumber])
             {
                 //then this cell fails low
                 cellFailsLowBitmap[ic] |= (1 << cellNumber);
@@ -772,11 +774,13 @@ bool LTC68042configure_basicConfidenceTest(void)
     cellBalance_set_cellsAreBalancing(YES);
 
     //================== start with resting cell voltages
+Serial.print(F(" T-r "));//WGCToDoNow: temporary debugging statement
     testHelper_finishInProcessAcquision();
     testHelper_acquireAllCellVoltages();
     testHelper_saveCellVoltages();
 
     //================== now do even cells
+Serial.print(F(" T-e "));//WGCToDoNow: temporary debugging statement
     testHelper_setCellDischarge(TESTDISCHASRGE_EvenCellsBitMap);
 
     //measure and check while even cells are discharging
@@ -788,6 +792,7 @@ bool LTC68042configure_basicConfidenceTest(void)
 
     //================== now do odd cells
     //  (Yes, some redundncy in detecting open sense wires)
+Serial.print(F(" T-o "));//WGCToDoNow: temporary debugging statement
     testHelper_setCellDischarge(TESTDISCHASRGE_OddCellsBitMap);
 
     //measure and check while odd cells are discharging
@@ -818,7 +823,7 @@ bool LTC68042configure_basicConfidenceTest(void)
     errorCounts -= LTC68042result_errorCount_get();
     LTC68042cell_dischargeAllowedDuringConversion_set(IS_DISCHARGE_ALLOWED_DURING_CONVERSION);
 
-    Serial.print(F("\n+Basic BMC circuit test"));
+    Serial.print(F("\n+Basic BMS circuit test"));
     Serial.print(F("\n   Acquisition errors: "));
     if (0 == errorCounts) { Serial.print(F("None. Test should be good")); }
     else

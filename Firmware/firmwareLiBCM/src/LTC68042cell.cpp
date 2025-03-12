@@ -11,8 +11,8 @@
 //  Example: cellVoltages_counts[0][ 1] is IC_1 cell_02
 //  Example: cellVoltages_counts[3][11] is IC_4 cell_12
 uint16_t cellVoltages_counts[TOTAL_IC][CELLS_PER_IC];
-uint32_t conversionStart_ms = 0;
-bool conversionInProcess = false;
+uint32_t conversionExpectedDuration_us = LTC6804_MAX_CONVERSION_TIME_ms;
+uint32_t conversionStart_us = 0;
 bool dcp_State = IS_DISCHARGE_ALLOWED_DURING_CONVERSION;
 
 //JTS2doLater: Add cell voltage test that sets user alert if a cell voltage suddenly changes from 'balanced' to 'majorly imbalanced'
@@ -45,8 +45,8 @@ void startCellConversion(void)
     cmd[3] = (uint8_t)(temp_pec);
 
     LTC68042configure_spiWrite(4,cmd); //send 'adcv' command to all LTC6804s (broadcast command)
-    conversionInProcess = true;
-    conversionStart_ms = millis();
+    conversionExpectedDuration_us = LTC6804_MAX_CONVERSION_TIME_ms;
+    conversionStart_us = micros();
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -56,22 +56,36 @@ void startCellConversion(void)
 //  (private method)
 void startMAX17843CellConversion(void)
 {
-digitalWrite(PIN_LATRIG, HIGH); //WGCToDo: temporary debugging statement
-digitalWrite(PIN_LASIG, HIGH);//WGCToDo: temporary debugging statement
-digitalWrite(PIN_LASIG, LOW); // #0 WGCToDo: temporary debugging statement
-digitalWrite(PIN_LASIG, HIGH);//WGCToDo: temporary debugging statement
-    // Write M873_SCANCTRL to all devices to start a scan
-    //WGCToDoNow: 2025/03/10 M873_SCANCTRL_AUTOBALSWDIS is 0, allowing measurements while CB discharge is enabled.
+Serial.print(F(" sc"));//WGCToDoNow: temporary debugging statement
+    //WGCToDo: delete temporary debugging statements
+    //digitalWrite(PIN_LATRIG, HIGH); //temporary debugging statement
+    //digitalWrite(PIN_LASIG, HIGH); //temporary debugging statement
+    //digitalWrite(PIN_LASIG, LOW); // #0: temporary debugging statement
+    //digitalWrite(PIN_LASIG, HIGH);//WGCToDo: temporary debugging statement
+
+    //WGCToDoNow: Adding LTC68042configure_acqusitionPrecision_get() based control over M873_SCANCTRL_bfOVSAMPL
+    uint8_t overSamples = (LTC68042configure_acqusitionPrecision_get() ? 16 : M873_SCANCTRL_INIT_OVSAMPL);
+    //determine expected conversion/acquisition time based on acquisition parameters
+    conversionExpectedDuration_us = MAX17841configure_calcAcquisitionTime_us(
+      CELLS_PER_IC,
+      M873_MEASUREEN_INIT_AIN1EN, M873_MEASUREEN_INIT_AIN2EN, M873_ACQCFG_INIT_AINTIME,
+      M873_MEASUREEN_INIT_BLOCKEN, (BFN_GET(M873_DIAGCFG_bfDIAGSEL, M873_DIAGCFG_INIT)),
+      overSamples,
+      M873_SCANCTRL_INIT_AUTOBALSWDIS, (BFN_GET(M873_ADR_bfCELL_RECOVERY_TIME, M873_ADR_INIT)));
+    //WGCToDoNow: Need to look at impact of conversionExpectedDuration_us on keep-alive interval.
+    //WGCToDoNext: 2025/03/10 M873_SCANCTRL_AUTOBALSWDIS is 0, allowing measurements while CB discharge is enabled.
     //  This is good for BIST, but might be an issue for SoC during balancing.
     //  Follow IS_DISCHARGE_ALLOWED_DURING_CONVERSION, and maybe make it run-time dynamic
+
+    // Write M873_SCANCTRL to all devices to start a scan
     MAX1784Xcomms_writeAll843Reg(
       M873_SCANCTRL,
       TOTAL_IC,
       M873_SCANCTRL_INIT | BITVALUE(M873_SCANCTRL_SCAN),
       MCONT_FEW_PRTX);
-    conversionInProcess = true;
-    conversionStart_ms = millis();
-digitalWrite(PIN_LASIG, LOW); // #6 WGCToDo: temporary debugging statement
+    conversionStart_us = micros();
+
+    //digitalWrite(PIN_LASIG, LOW); // #6: temporary debugging statement
 }
 #endif
 
@@ -269,10 +283,10 @@ void processAllCellVoltages(void)
           #ifdef BMS_TYPE_LiBCM
             uint16_t cellVoltageUnderTest = cellVoltages_counts[chip][cell];
           #else
-            //WGCToDo: the floating multiply could be replaced by a faster integer multiply then right shift
-            //WGCToDo:    x * 0.762939 -> ((x * 49) >> 6) [0.35% error)
-            //WGCToDo:   see "Mult>> Finder" tab in Motherboard/RevC/V&V/OEM Current Sensor.ods
-            //WGCToDo: Maybe do fast/close while key-on, and slow/accurate while key-off?
+            //WGCToDoLater: the floating multiply could be replaced by a faster integer multiply then right shift
+            //WGCToDoLater:    x * 0.762939 -> ((x * 49) >> 6) [0.35% error)
+            //WGCToDoLater:   see "Mult>> Finder" tab in Motherboard/RevC/V&V/OEM Current Sensor.ods
+            //WGCToDoLater: Maybe do fast/close while key-on, and slow/accurate while key-off?
             uint16_t cellVoltageUnderTest = (uint16_t)((float)cellVoltages_counts[chip][cell] * MAX17873_CONVERSION_TO_100uV_per_bit) ;
           #endif
 
@@ -341,6 +355,7 @@ void processAllCellVoltages(void)
 bool LTC68042cell_nextVoltages(void)
 {
     static uint8_t presentState = LTC_STATE_FIRSTRUN;
+    static bool conversionInProcess = false;
     bool cellVoltageDataStatus = GATHERING_CELL_DATA;
 
     if (LTC68042configure_wakeup() == LTC6804_CORE_JUST_WOKE_UP) { presentState = LTC_STATE_FIRSTRUN; }
@@ -356,7 +371,11 @@ bool LTC68042cell_nextVoltages(void)
         //wait for current conversion to complete (should not usually be necessary)
         if (conversionInProcess)
         {
-            while (LTC6804_MAX_CONVERSION_TIME_ms > (millis() - conversionStart_ms)) { ; }
+Serial.print(F(" el "));//WGCToDoNow: temporary debugging statement
+Serial.print(micros() - conversionStart_us);//WGCToDoNow: temporary debugging statement
+Serial.print(F(" of "));
+Serial.print(conversionExpectedDuration_us);//WGCToDoNow: temporary debugging statement
+            while (conversionExpectedDuration_us > (micros() - conversionStart_us)) { ; }
             conversionInProcess = false;
         }
         validateAndStoreNextCVR(chipAddress, cellVoltageRegister);
@@ -372,6 +391,7 @@ bool LTC68042cell_nextVoltages(void)
             {
                 //just finished reading last IC's last CVR... all cell voltages stored in cellVoltages_counts[][]
                 startCellConversion(); //start the next cell conversion //takes a while to finish
+                conversionInProcess = true;
 
                 chipAddress = FIRST_IC_ADDR; //reset to first LTC IC
                 presentState = LTC_STATE_PROCESS; //all cell voltages gathered.  Process data on next run.
@@ -382,15 +402,20 @@ bool LTC68042cell_nextVoltages(void)
         //wait for current conversion to complete (should not usually be necessary)
         if (conversionInProcess)
         {
-            while (LTC6804_MAX_CONVERSION_TIME_ms > (millis() - conversionStart_ms)) { ; }
+Serial.print(F(" el "));//WGCToDoNow: temporary debugging statement
+Serial.print(micros() - conversionStart_us);//WGCToDoNow: temporary debugging statement
+Serial.print(F(" of "));
+Serial.print(conversionExpectedDuration_us);//WGCToDoNow: temporary debugging statement
+            while (conversionExpectedDuration_us > (micros() - conversionStart_us)) { ; }
             conversionInProcess = false;
         }
         // for MAX17843 BMS, do 12 cells at a time
         validateAndStoreNextMAX17843(chipAddress);
         if (++chipAddress >= (TOTAL_IC)) {
-digitalWrite(PIN_LATRIG, LOW); //WGCToDo: temporary debugging statement
+            //digitalWrite(PIN_LATRIG, LOW); // temporary debugging statement
             //just finished a battery module
             startMAX17843CellConversion();
+            conversionInProcess = true;
             chipAddress = 0; //reset to first NAX17843 IC
             presentState = LTC_STATE_PROCESS; //all cell voltages gathered.  Process data on next run.
         }
@@ -414,6 +439,7 @@ digitalWrite(PIN_LATRIG, LOW); //WGCToDo: temporary debugging statement
       #else
         startMAX17843CellConversion();
       #endif
+        conversionInProcess = true;
         presentState = LTC_STATE_GATHER;
     }
 
