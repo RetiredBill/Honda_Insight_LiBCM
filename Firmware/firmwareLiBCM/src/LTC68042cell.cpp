@@ -11,7 +11,7 @@
 //  Example: cellVoltages_counts[0][ 1] is IC_1 cell_02
 //  Example: cellVoltages_counts[3][11] is IC_4 cell_12
 uint16_t cellVoltages_counts[TOTAL_IC][CELLS_PER_IC];
-uint32_t conversionExpectedDuration_us = LTC6804_MAX_CONVERSION_TIME_ms;
+uint32_t conversionExpectedDuration_us = (LTC6804_MAX_CONVERSION_TIME_ms * 1000);
 uint32_t conversionStart_us = 0;
 bool dcp_State = IS_DISCHARGE_ALLOWED_DURING_CONVERSION;
 
@@ -45,7 +45,7 @@ void startCellConversion(void)
     cmd[3] = (uint8_t)(temp_pec);
 
     LTC68042configure_spiWrite(4,cmd); //send 'adcv' command to all LTC6804s (broadcast command)
-    conversionExpectedDuration_us = LTC6804_MAX_CONVERSION_TIME_ms;
+    conversionExpectedDuration_us = (LTC6804_MAX_CONVERSION_TIME_ms * 1000);
     conversionStart_us = micros();
 }
 
@@ -83,9 +83,9 @@ Serial.print(F(" sc"));//WGCToDoNow: temporary debugging statement
       TOTAL_IC,
       M873_SCANCTRL_INIT | BITVALUE(M873_SCANCTRL_SCAN),
       MCONT_FEW_PRTX);
-    conversionStart_us = micros();
 
     //digitalWrite(PIN_LASIG, LOW); // #6: temporary debugging statement
+    conversionStart_us = micros();
 }
 #endif
 
@@ -355,71 +355,64 @@ void processAllCellVoltages(void)
 bool LTC68042cell_nextVoltages(void)
 {
     static uint8_t presentState = LTC_STATE_FIRSTRUN;
-    static bool conversionInProcess = false;
+    static bool conversionInProcess = false; //used to speed up execution of conversion complete test
     bool cellVoltageDataStatus = GATHERING_CELL_DATA;
 
     if (LTC68042configure_wakeup() == LTC6804_CORE_JUST_WOKE_UP) { presentState = LTC_STATE_FIRSTRUN; }
 
     if (presentState == LTC_STATE_GATHER)
     { //retrieve next CVR from LTC, then validate and store in cellVoltages_counts[][] array
-
         //round-robin state handlers
-      #ifdef BMS_TYPE_LiBCM
-        static uint8_t chipAddress = FIRST_IC_ADDR;
-        static char cellVoltageRegister = 'A'; //LTC68042 contains QTY4 CVRs (A/B/C/D)
-
-        //wait for current conversion to complete (should not usually be necessary)
-        if (conversionInProcess)
+        // but don't gather data or advance the state if the  current conversion is not complete (should not usually be necessary)
+        if ( ( ! conversionInProcess) || (conversionExpectedDuration_us < (micros() - conversionStart_us)) )
         {
-Serial.print(F(" el "));//WGCToDoNow: temporary debugging statement
-Serial.print(micros() - conversionStart_us);//WGCToDoNow: temporary debugging statement
-Serial.print(F(" of "));
-Serial.print(conversionExpectedDuration_us);//WGCToDoNow: temporary debugging statement
-            while (conversionExpectedDuration_us > (micros() - conversionStart_us)) { ; }
+            //then no conversion is in process or it has completed
             conversionInProcess = false;
-        }
-        validateAndStoreNextCVR(chipAddress, cellVoltageRegister);
 
-        //determine which LTC68042 IC & CVR to read next
-        cellVoltageRegister++;
-        if (cellVoltageRegister >= 'E')
-        {
-            //LTC6804 only has registers A,B,C,D
-            cellVoltageRegister = 'A'; //reset back to first CVR
+          #ifdef BMS_TYPE_LiBCM
+            static uint8_t chipAddress = FIRST_IC_ADDR;
+            static char cellVoltageRegister = 'A'; //LTC68042 contains QTY4 CVRs (A/B/C/D)
 
-            if (++chipAddress >= (FIRST_IC_ADDR + TOTAL_IC))
+            validateAndStoreNextCVR(chipAddress, cellVoltageRegister);
+
+            //determine which LTC68042 IC & CVR to read next
+            cellVoltageRegister++;
+            if (cellVoltageRegister >= 'E')
             {
-                //just finished reading last IC's last CVR... all cell voltages stored in cellVoltages_counts[][]
-                startCellConversion(); //start the next cell conversion //takes a while to finish
-                conversionInProcess = true;
+                //LTC6804 only has registers A,B,C,D
+                cellVoltageRegister = 'A'; //reset back to first CVR
 
-                chipAddress = FIRST_IC_ADDR; //reset to first LTC IC
+                if (++chipAddress >= (FIRST_IC_ADDR + TOTAL_IC))
+                {
+                    //just finished reading last IC's last CVR... all cell voltages stored in cellVoltages_counts[][]
+                    startCellConversion(); //start the next cell conversion //takes a while to finish
+                    conversionInProcess = true;
+
+                    chipAddress = FIRST_IC_ADDR; //reset to first LTC IC
+                    presentState = LTC_STATE_PROCESS; //all cell voltages gathered.  Process data on next run.
+                }
+            }
+          #else
+            static uint8_t chipAddress = 0;
+
+            // for MAX17843 BMS, do 12 cells at a time
+            validateAndStoreNextMAX17843(chipAddress);
+            if (++chipAddress >= (TOTAL_IC)) {
+                //digitalWrite(PIN_LATRIG, LOW); // temporary debugging statement
+                //just finished a battery module
+                startMAX17843CellConversion();
+                conversionInProcess = true;
+                chipAddress = 0; //reset to first NAX17843 IC
                 presentState = LTC_STATE_PROCESS; //all cell voltages gathered.  Process data on next run.
             }
+          #endif
         }
-      #else
-        static uint8_t chipAddress = 0;
-        //wait for current conversion to complete (should not usually be necessary)
-        if (conversionInProcess)
-        {
+        else {//WGCToDoNow: temporary debugging statement
 Serial.print(F(" el "));//WGCToDoNow: temporary debugging statement
 Serial.print(micros() - conversionStart_us);//WGCToDoNow: temporary debugging statement
 Serial.print(F(" of "));
 Serial.print(conversionExpectedDuration_us);//WGCToDoNow: temporary debugging statement
-            while (conversionExpectedDuration_us > (micros() - conversionStart_us)) { ; }
-            conversionInProcess = false;
-        }
-        // for MAX17843 BMS, do 12 cells at a time
-        validateAndStoreNextMAX17843(chipAddress);
-        if (++chipAddress >= (TOTAL_IC)) {
-            //digitalWrite(PIN_LATRIG, LOW); // temporary debugging statement
-            //just finished a battery module
-            startMAX17843CellConversion();
-            conversionInProcess = true;
-            chipAddress = 0; //reset to first NAX17843 IC
-            presentState = LTC_STATE_PROCESS; //all cell voltages gathered.  Process data on next run.
-        }
-      #endif
+        }//WGCToDoNow: temporary debugging statement
     }
 
     else if (presentState == LTC_STATE_PROCESS)
