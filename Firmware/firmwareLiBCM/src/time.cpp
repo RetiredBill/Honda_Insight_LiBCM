@@ -138,7 +138,7 @@ void time_waitForLoopPeriod(void)
     timestamp_loopStart_previous_ms = timeNow_ms;
 
     if ((key_getSampledState() == KEYSTATE_ON) && (timingMet == false)) { Serial.print('*'); }
-    else { Serial.print('+'); }//WGCToDoNow: debugging only, delete!
+    //else { Serial.print('+'); }//WGCToDoLater: debugging only
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////

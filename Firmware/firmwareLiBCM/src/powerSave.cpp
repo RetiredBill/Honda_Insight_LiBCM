@@ -171,7 +171,7 @@ void powerSave_gotoSleep(void)
         time_latestUserInputUSB_set();
         Serial.print(F("\nRepeat command (LiBCM was asleep)"));
     }
-    else {Serial.print(F("X"));}//WGCToDoNow: debug only. delete!
+    //else {Serial.print(F("X"));}//WGCToDoLater: debug only.
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////

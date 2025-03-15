@@ -51,14 +51,13 @@ void startCellConversion(void)
   #else
     // MAX17843 ICs
 
-Serial.print(F("aT"));//WGCToDoNow: temporary debugging statement
+    //Serial.print(F("aT"));//WGCToDoLater: temporary debugging statement
     //WGCToDo: delete temporary debugging statements
     //digitalWrite(PIN_LATRIG, HIGH); //temporary debugging statement
     //digitalWrite(PIN_LASIG, HIGH); //temporary debugging statement
     //digitalWrite(PIN_LASIG, LOW); // #0: temporary debugging statement
     //digitalWrite(PIN_LASIG, HIGH);//WGCToDo: temporary debugging statement
 
-    //WGCToDoNow: Adding LTC68042configure_acqusitionPrecision_get() based control over M873_SCANCTRL_bfOVSAMPL
     uint8_t overSamples = (LTC68042configure_acqusitionPrecision_get() ? 16 : M873_SCANCTRL_INIT_OVSAMPL);
     //determine expected conversion/acquisition time based on acquisition parameters
     conversionExpectedDuration_us = MAX17841configure_calcAcquisitionTime_us(
@@ -67,7 +66,7 @@ Serial.print(F("aT"));//WGCToDoNow: temporary debugging statement
       M873_MEASUREEN_INIT_BLOCKEN, (BFN_GET(M873_DIAGCFG_bfDIAGSEL, M873_DIAGCFG_INIT)),
       overSamples,
       M873_SCANCTRL_INIT_AUTOBALSWDIS, (BFN_GET(M873_ADR_bfCELL_RECOVERY_TIME, M873_ADR_INIT)));
-    //WGCToDoNow: Need to look at impact of conversionExpectedDuration_us on keep-alive interval.
+    //WGCToDoNext: Need to look at impact of conversionExpectedDuration_us on keep-alive interval.
     //WGCToDoNext: 2025/03/10 M873_SCANCTRL_AUTOBALSWDIS is 0, allowing measurements while CB discharge is enabled.
     //  This is good for BIST, but might be an issue for SoC during balancing.
     //  Follow IS_DISCHARGE_ALLOWED_DURING_CONVERSION, and maybe make it run-time dynamic
@@ -368,7 +367,7 @@ uint8_t LTC68042cell_nextVoltages(uint8_t triggerMode)
         {
             //then we need to wait for it to complete before starting ours, so don't advance presentState, and
             cellVoltageDataStatus = WAITING_TO_TRIGGER;
-Serial.print(F("wT"));//WGCToDoNow: temporary debugging statement
+            //Serial.print(F("wT"));//WGCToDoLater: temporary debugging statement
         }
     }
 
@@ -423,13 +422,13 @@ Serial.print(F("wT"));//WGCToDoNow: temporary debugging statement
             }
           #endif
         }
-        else {//WGCToDoNow: temporary debugging statement
-Serial.print(F("wG"));//WGCToDoNow: temporary debugging statement
-//Serial.print(F(" el "));//WGCToDoNow: temporary debugging statement
-//Serial.print(micros() - conversionStart_us);//WGCToDoNow: temporary debugging statement
-//Serial.print(F(" of "));
-//Serial.print(conversionExpectedDuration_us);//WGCToDoNow: temporary debugging statement
-        }//WGCToDoNow: temporary debugging statement
+        //else {//WGCToDoLater: temporary debugging statement
+        //Serial.print(F("wG"));//WGCToDoLater: temporary debugging statement
+        //Serial.print(F(" el "));//WGCToDoLater: temporary debugging statement
+        //Serial.print(micros() - conversionStart_us);//WGCToDoLater: temporary debugging statement
+        //Serial.print(F(" of "));
+        //Serial.print(conversionExpectedDuration_us);//WGCToDoLater: temporary debugging statement
+        //}//WGCToDoLater: temporary debugging statement
     }
 
     else if (presentState & (LTC_STATE_PROCESS | LTC_STATE_PROCESS_TRIGGERED))

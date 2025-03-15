@@ -434,7 +434,7 @@
     //   Another possibility is that they have anomalously low
     //   cable/wire/connection resistance (deemed unlikely).
     // cell voltage delta limit:
-    #define TESTBASIC_DELTA_TESTLIMIT_counts  30 //WGCToDoNow: this limit surely needs refinement, and likely won't work in BMS_TYPE_WGCLiBCM at all
+    #define TESTBASIC_DELTA_TESTLIMIT_counts  30 //WGCToDoNext: this limit surely needs refinement, and likely won't work in BMS_TYPE_WGCLiBCM at all
 
     //======================= testDischargeFETs defines
     #define TESTDISCHASRGE_EvenCellsBitMap 0b0000010101010101
