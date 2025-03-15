@@ -483,6 +483,7 @@ void LTC68042configure_wakeupIsoSPI(void)
 // For BMS_TYPE_WGCLiBCM, MAX1784x chips are automatically kept awake by MAX17841 keep-alive function,
 //   and this function now just returns the JUST_WOKE_UP vs ALREADY_AWAKE state;
 //   it doesn't wake anything up...
+//WGCToDoNext: CRITICAL if we slept, and sleep shut off MAX17841 to save power, and we wake up and don't do LTC68042configure_programVolatileDefaults() (like via LTC68042cell_nextVoltages()), but instead do something like LTC68042configure_setBalanceResistors(), THIS FAILS!
 bool LTC68042configure_wakeup(void)
 {
   #ifndef BMS_TYPE_WGCLiBCM
@@ -507,6 +508,8 @@ static int16_t  nonDischargingAverageDeltaV_counts = 0;
 static uint16_t test1_cellStatusBitmap[TOTAL_IC] = {0};
 static uint16_t test2_cellStatusBitmap[TOTAL_IC] = {0};
 
+/////////////////////////////////////////////////////////////////////////////////////////
+
 void LTC68042configure_enabletestDischargeFETs(void) {testDischargeState = TESTDISCHASRGESTATE_TURNON;}
 
 ///////// test helper functions
@@ -520,26 +523,11 @@ void testHelper_clearCellTestFlags(int16_t testFlagBitmap[])
 
 
 //helper for optimized acquisition of cell volatges
-//  (LTC68042cell_acquireAllCellVoltages() might do 2 aquisitions when only 1 is required)
-// Note: this scheme is only optimum when used inside of a single blocking test function
-//WGCToDoNow: change this to access LTC68042cell_nextVoltages state without kicking off another acquisition
-void testHelper_finishInProcessAcquision(void)
-{
-    if (LTC68042cell_nextVoltages() != CELL_DATA_PROCESSED)
-    {
-        // then an acquisition is already underway,
-        // but can't be certain of operating condions. so...
-Serial.print(F(" fw"));//WGCToDoNow: debug only
-        while (LTC68042cell_nextVoltages() != CELL_DATA_PROCESSED) { ; } //clear old data
-    }
-    //and we can hold right there, as long as this is only called within a single blocking test routine
-}
-
 void testHelper_acquireAllCellVoltages(void)
 {
-    while (LTC68042cell_nextVoltages() != CELL_DATA_PROCESSED) { ; } //gather new data
-for (uint8_t ic = 0; ic < TOTAL_IC; ic++) debugUSB_printOneICsCellVoltages( ic, FOUR_DECIMAL_PLACES);//WGCToDoNow: debug only
-Serial.println("");//WGCToDoNow: debug only
+    while (LTC68042cell_nextVoltages(LTC_TRIGGERMODE_TRIGGERED) != CELL_DATA_PROCESSED) { ; } //gather new data
+//for (uint8_t ic = 0; ic < TOTAL_IC; ic++) debugUSB_printOneICsCellVoltages( ic, FOUR_DECIMAL_PLACES);//WGCToDoNow: debug only
+//Serial.println("");//WGCToDoNow: debug only
 }
 
 //helper function to set up a cell discharge circuit test
@@ -775,7 +763,7 @@ bool LTC68042configure_basicConfidenceTest(void)
 
     //================== start with resting cell voltages
 Serial.print(F(" T-r "));//WGCToDoNow: temporary debugging statement
-    testHelper_finishInProcessAcquision();
+    LTC68042cell_nextVoltages(LTC_TRIGGERMODE_FORCE_TRIGGERED); //abandon any in-process acquisition (waiting for it to complete, if needed)
     testHelper_acquireAllCellVoltages();
     testHelper_saveCellVoltages();
 
@@ -823,7 +811,7 @@ Serial.print(F(" T-o "));//WGCToDoNow: temporary debugging statement
     errorCounts -= LTC68042result_errorCount_get();
     LTC68042cell_dischargeAllowedDuringConversion_set(IS_DISCHARGE_ALLOWED_DURING_CONVERSION);
 
-    Serial.print(F("\n+Basic BMS circuit test"));
+    Serial.print(F("\nBasic BMS circuit test"));
     Serial.print(F("\n   Acquisition errors: "));
     if (0 == errorCounts) { Serial.print(F("None. Test should be good")); }
     else
@@ -889,7 +877,7 @@ uint8_t LTC68042configure_testDischargeFETs(void)
 
 if (testDischargeState != TESTDISCHASRGESTATE_DISABLED) { //WGCToDo: debugging only
     uint32_t now_ms = millis();
-    Serial.print(F("\n+CellBalBIST state: "));
+    Serial.print(F("\nCellBalBIST state: "));
     Serial.print(testDischargeState);
     Serial.print(F(", now (ms): "));
     Serial.print(now_ms);

@@ -23,11 +23,12 @@ void LTC68042cell_dischargeAllowedDuringConversion_set(bool dcpState) { dcp_Stat
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-#ifdef BMS_TYPE_LiBCM
-//tell all LTC68042 ICs to measure all cells
+//tell all BMS ICs to measure all cells
 //  (private method)
 void startCellConversion(void)
 {
+  #ifdef BMS_TYPE_LiBCM
+    // LTC68042 ICs
     uint8_t cmd[4];
 
     //JTS2doLater: Replace magic numbers with #define
@@ -46,17 +47,11 @@ void startCellConversion(void)
 
     LTC68042configure_spiWrite(4,cmd); //send 'adcv' command to all LTC6804s (broadcast command)
     conversionExpectedDuration_us = (LTC6804_MAX_CONVERSION_TIME_ms * 1000);
-    conversionStart_us = micros();
-}
 
-/////////////////////////////////////////////////////////////////////////////////////////
+  #else
+    // MAX17843 ICs
 
-#else
-//tell all MAX17843 ICs to measure all cells
-//  (private method)
-void startMAX17843CellConversion(void)
-{
-Serial.print(F(" sc"));//WGCToDoNow: temporary debugging statement
+Serial.print(F("aT"));//WGCToDoNow: temporary debugging statement
     //WGCToDo: delete temporary debugging statements
     //digitalWrite(PIN_LATRIG, HIGH); //temporary debugging statement
     //digitalWrite(PIN_LASIG, HIGH); //temporary debugging statement
@@ -85,9 +80,9 @@ Serial.print(F(" sc"));//WGCToDoNow: temporary debugging statement
       MCONT_FEW_PRTX);
 
     //digitalWrite(PIN_LASIG, LOW); // #6: temporary debugging statement
+  #endif
     conversionStart_us = micros();
 }
-#endif
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -352,25 +347,45 @@ void processAllCellVoltages(void)
 //
 //returns false while gathering data, true each time all data is processed
 //  (Public method)
-bool LTC68042cell_nextVoltages(void)
+uint8_t LTC68042cell_nextVoltages(uint8_t triggerMode)
 {
     static uint8_t presentState = LTC_STATE_FIRSTRUN;
     static bool conversionInProcess = false; //used to speed up execution of conversion complete test
-    bool cellVoltageDataStatus = GATHERING_CELL_DATA;
+    uint8_t cellVoltageDataStatus = GATHERING_CELL_DATA;
 
     if (LTC68042configure_wakeup() == LTC6804_CORE_JUST_WOKE_UP) { presentState = LTC_STATE_FIRSTRUN; }
 
-    if (presentState == LTC_STATE_GATHER)
+    if ((presentState & LTC_STATE_TRIGGER) || (LTC_TRIGGERMODE_FORCE_TRIGGERED == triggerMode))
+    {
+        if ( ( ! conversionInProcess) || (conversionExpectedDuration_us < (micros() - conversionStart_us)) )
+        {
+            //then no conversion is in process or last one has completed
+            startCellConversion();
+            conversionInProcess = true;
+            presentState = LTC_STATE_GATHER;
+        }
+        else
+        {
+            //then we need to wait for it to complete before starting ours, so don't advance presentState, and
+            cellVoltageDataStatus = WAITING_TO_TRIGGER;
+Serial.print(F("wT"));//WGCToDoNow: temporary debugging statement
+        }
+    }
+
+    else if (presentState & LTC_STATE_GATHER)
     { //retrieve next CVR from LTC, then validate and store in cellVoltages_counts[][] array
         //round-robin state handlers
         // but don't gather data or advance the state if the  current conversion is not complete (should not usually be necessary)
         if ( ( ! conversionInProcess) || (conversionExpectedDuration_us < (micros() - conversionStart_us)) )
         {
-            //then no conversion is in process or it has completed
+            //then no conversion is in process or last one has completed
             conversionInProcess = false;
 
-          #ifdef BMS_TYPE_LiBCM
             static uint8_t chipAddress = FIRST_IC_ADDR;
+          #ifndef BMS_TYPE_LiBCM
+            // for MAX17843 BMS, do 12 cells at a time
+            validateAndStoreNextMAX17843(chipAddress);
+          #else
             static char cellVoltageRegister = 'A'; //LTC68042 contains QTY4 CVRs (A/B/C/D)
 
             validateAndStoreNextCVR(chipAddress, cellVoltageRegister);
@@ -381,57 +396,73 @@ bool LTC68042cell_nextVoltages(void)
             {
                 //LTC6804 only has registers A,B,C,D
                 cellVoltageRegister = 'A'; //reset back to first CVR
-
+          #endif
                 if (++chipAddress >= (FIRST_IC_ADDR + TOTAL_IC))
                 {
+                    //last "LTC_STATE_GATHER" call for this cycle
                     //just finished reading last IC's last CVR... all cell voltages stored in cellVoltages_counts[][]
-                    startCellConversion(); //start the next cell conversion //takes a while to finish
-                    conversionInProcess = true;
+                    if (LTC_TRIGGERMODE_CONTINUOUS == triggerMode)
+                    {
+                        startCellConversion(); //start the next cell conversion //takes a while to finish
+                        conversionInProcess = true;
+                        presentState = LTC_STATE_PROCESS; //all cell voltages gathered.  Process data on next run.
+                    }
+                    else if (LTC_TRIGGERMODE_TRIGGERED == triggerMode)
+                    {
+                        presentState = LTC_STATE_PROCESS_TRIGGERED; //all cell voltages gathered.  Process data on next run, but trigger after that
+                    }
+                    else
+                    {
+                        Serial.print(F("\nillegal LTC68042cell trigger mode"));
+                        while (1) {;} //hang here until watchdog resets.
+                    }
 
                     chipAddress = FIRST_IC_ADDR; //reset to first LTC IC
-                    presentState = LTC_STATE_PROCESS; //all cell voltages gathered.  Process data on next run.
                 }
-            }
-          #else
-            static uint8_t chipAddress = 0;
-
-            // for MAX17843 BMS, do 12 cells at a time
-            validateAndStoreNextMAX17843(chipAddress);
-            if (++chipAddress >= (TOTAL_IC)) {
-                //digitalWrite(PIN_LATRIG, LOW); // temporary debugging statement
-                //just finished a battery module
-                startMAX17843CellConversion();
-                conversionInProcess = true;
-                chipAddress = 0; //reset to first NAX17843 IC
-                presentState = LTC_STATE_PROCESS; //all cell voltages gathered.  Process data on next run.
+          #ifdef BMS_TYPE_LiBCM
             }
           #endif
         }
         else {//WGCToDoNow: temporary debugging statement
-Serial.print(F(" el "));//WGCToDoNow: temporary debugging statement
-Serial.print(micros() - conversionStart_us);//WGCToDoNow: temporary debugging statement
-Serial.print(F(" of "));
-Serial.print(conversionExpectedDuration_us);//WGCToDoNow: temporary debugging statement
+Serial.print(F("wG"));//WGCToDoNow: temporary debugging statement
+//Serial.print(F(" el "));//WGCToDoNow: temporary debugging statement
+//Serial.print(micros() - conversionStart_us);//WGCToDoNow: temporary debugging statement
+//Serial.print(F(" of "));
+//Serial.print(conversionExpectedDuration_us);//WGCToDoNow: temporary debugging statement
         }//WGCToDoNow: temporary debugging statement
     }
 
-    else if (presentState == LTC_STATE_PROCESS)
+    else if (presentState & (LTC_STATE_PROCESS | LTC_STATE_PROCESS_TRIGGERED))
     {
         //all cell voltages read...
+        if ((presentState & LTC_STATE_PROCESS_TRIGGERED) && (LTC_TRIGGERMODE_CONTINUOUS == triggerMode))
+        {
+            //then triggerMode changed from TRIGGERED to CONTINUOUS, allow the change of mode,
+            //  and start a conversion here to get a head start...
+            startCellConversion();
+            conversionInProcess = true;
+            presentState = LTC_STATE_PROCESS; //for next state determination
+        }
+        else if ((presentState & LTC_STATE_PROCESS) && (LTC_STATE_PROCESS_TRIGGERED == triggerMode))
+        {
+            //then triggerMode changed from CONTINUOUS to TRIGGERED: an extraneous trigger has already happened,
+            //  but change to presentState = LTC_STATE_PROCESS_TRIGGERED, and wait at start of LTC_STATE_TRIGGER
+            //  might happen
+            presentState = LTC_STATE_PROCESS_TRIGGERED; //for next state determination
+        }
+
         processAllCellVoltages(); //do math and store in LTC68042_result.c
         cellVoltageDataStatus = CELL_DATA_PROCESSED;
-        presentState = LTC_STATE_GATHER; //gather data on next run
+
+        if (presentState & LTC_STATE_PROCESS_TRIGGERED) { presentState = LTC_STATE_TRIGGER; } //trigger on next run
+        else                                            { presentState = LTC_STATE_GATHER;  } //gather data on next run (a trigger has already happened)
     }
 
     else if (presentState == LTC_STATE_FIRSTRUN)
     {
         //LTC6804 ICs were previously off
         LTC68042configure_programVolatileDefaults();
-      #ifdef BMS_TYPE_LiBCM
         startCellConversion();
-      #else
-        startMAX17843CellConversion();
-      #endif
         conversionInProcess = true;
         presentState = LTC_STATE_GATHER;
     }
@@ -449,12 +480,11 @@ Serial.print(conversionExpectedDuration_us);//WGCToDoNow: temporary debugging st
 
 //Only call when keyOFF //takes too long to execute when keyON (causes check engine light)
 //Results are stored in "LTC68042_results.c"
-//JTS2doNext: rewrite to remove double call hack
 //  (Public method)
 void LTC68042cell_acquireAllCellVoltages(void)
 {
-    while (LTC68042cell_nextVoltages() != CELL_DATA_PROCESSED) { ; } //clear old data (if any)
-    while (LTC68042cell_nextVoltages() != CELL_DATA_PROCESSED) { ; } //gather new data
+    while (LTC68042cell_nextVoltages(LTC_TRIGGERMODE_FORCE_TRIGGERED) == WAITING_TO_TRIGGER) { ; } //abandon any in-process acquisition (waiting for it to complete, if needed)
+    while (LTC68042cell_nextVoltages(LTC_TRIGGERMODE_TRIGGERED) != CELL_DATA_PROCESSED) { ; } //gather new data
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
