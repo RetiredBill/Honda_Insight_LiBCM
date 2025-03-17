@@ -27,5 +27,7 @@
   #define BFN_EXTR(name, reg)     ( (reg) & BFN_MASK(name) )
   // Set named bitfield in reg to x with pre-shifted x.
   #define BFN_SET2(name, reg, x)  ( reg = ( (reg) & ~BFN_MASK(name) ) | BFN_EXTR(name,x) )
+  // Merge a named bitfield x into y. Equivalent to reg.name= x.
+  #define BFN_MERG(name, y, x)   (  ( (y) & ~BFN_MASK(name) ) | BFN_PREP(name,x) )
 
 #endif
