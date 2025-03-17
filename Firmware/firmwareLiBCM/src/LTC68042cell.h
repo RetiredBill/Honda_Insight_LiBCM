@@ -23,7 +23,7 @@
     //       LTC_TRIGGERMODE_TRIGGERED until LTC68042cell_nextVoltages() returns CELL_DATA_PROCESSED.
     // Switching between modes at any time is supported.  LTC68042cell_nextVoltages() will do the
     //    best it can.
-    #define LTC_TRIGGERMODE_CONTINUOUS     0
+    #define LTC_TRIGGERMODE_CONTINUOUS      0
     #define LTC_TRIGGERMODE_TRIGGERED       1
     #define LTC_TRIGGERMODE_FORCE_TRIGGERED 2
 
