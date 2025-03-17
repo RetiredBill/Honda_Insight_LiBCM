@@ -171,7 +171,9 @@ void powerSave_gotoSleep(void)
         time_latestUserInputUSB_set();
         Serial.print(F("\nRepeat command (LiBCM was asleep)"));
     }
-    //else {Serial.print(F("X"));}//WGCToDoLater: debug only.
+  #ifdef WGC_DEBUG_ACQ_VS_LOOP
+    else {Serial.print(F("X"));} // emit wake-from-sleep mark
+  #endif
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////

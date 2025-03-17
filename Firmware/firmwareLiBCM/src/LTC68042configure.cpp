@@ -753,13 +753,17 @@ bool LTC68042configure_basicConfidenceTest(void)
     cellBalance_set_cellsAreBalancing(YES);
 
     //================== start with resting cell voltages
-    //Serial.print(F(" T-r "));//WGCToDoNext: temporary debugging statement
+  #ifdef WGC_DEBUG_ACQ_VS_LOOP
+    Serial.print(F(" T-r ")); // debugging help
+  #endif
     LTC68042cell_acquireAllCellVoltages(); //abandon any in-process acquisition (waiting for it to complete, if needed)
     testHelper_saveCellVoltages();
     //WGCToDoNext: Add a test helper to print out acquired voltages in a debug mode, to gather data for test limit refinement, etc.
 
     //================== now do even cells
-    //Serial.print(F(" T-e "));//WGCToDoNext: temporary debugging statement
+  #ifdef WGC_DEBUG_ACQ_VS_LOOP
+    Serial.print(F(" T-e ")); // debugging help
+  #endif
     testHelper_setCellDischarge(TESTDISCHASRGE_EvenCellsBitMap);
 
     //measure and check while even cells are discharging
@@ -771,7 +775,9 @@ bool LTC68042configure_basicConfidenceTest(void)
 
     //================== now do odd cells
     //  (Yes, some redundncy in detecting open sense wires)
-    //Serial.print(F(" T-o "));//WGCToDoNext: temporary debugging statement
+  #ifdef WGC_DEBUG_ACQ_VS_LOOP
+    Serial.print(F(" T-o ")); // debugging help
+  #endif
     testHelper_setCellDischarge(TESTDISCHASRGE_OddCellsBitMap);
 
     //measure and check while odd cells are discharging

@@ -30,6 +30,10 @@ void LTC68042cell_dischargeAllowedDuringConversion_set(bool dcpState) { dcp_Stat
 //  (private method)
 void startCellConversion(void)
 {
+  #ifdef WGC_DEBUG_ACQ_VS_LOOP
+    Serial.print(F("aT")); //emit start-of-acquisition mark
+  #endif
+
   #ifdef BMS_TYPE_LiBCM
     // LTC68042 ICs
     uint8_t cmd[4];
@@ -56,13 +60,6 @@ void startCellConversion(void)
   #else
     // MAX17843 ICs
 
-    //Serial.print(F("aT"));//WGCToDoLater: temporary debugging statement
-    //WGCToDo: delete temporary debugging statements
-    //digitalWrite(PIN_LATRIG, HIGH); //temporary debugging statement
-    //digitalWrite(PIN_LASIG, HIGH); //temporary debugging statement
-    //digitalWrite(PIN_LASIG, LOW); // #0: temporary debugging statement
-    //digitalWrite(PIN_LASIG, HIGH);//WGCToDo: temporary debugging statement
-
     uint8_t overSamples = (LTC68042configure_acqusitionPrecision_get() ? 16 : M873_SCANCTRL_INIT_OVSAMPL);
     //determine expected conversion/acquisition time based on acquisition parameters
     conversionExpectedDuration_us = MAX17841configure_calcAcquisitionTime_us(
@@ -85,7 +82,6 @@ void startCellConversion(void)
       MCONT_FEW_PRTX);
     conversionStart_us = micros();
 
-    //digitalWrite(PIN_LASIG, LOW); // #6: temporary debugging statement
   #endif
 
     chipAddress = FIRST_IC_ADDR; //reset to first LTC IC
@@ -374,7 +370,9 @@ uint8_t LTC68042cell_nextVoltages(uint8_t triggerMode)
         {
             //then we need to wait for it to complete before starting ours, so don't advance presentState, and
             cellVoltageDataStatus = WAITING_TO_TRIGGER;
-            //Serial.print(F("wT"));//WGCToDoLater: temporary debugging statement
+          #ifdef WGC_DEBUG_ACQ_VS_LOOP
+            Serial.print(F("wT")); //emit defer-trigger mark
+          #endif
         }
     }
 
@@ -386,7 +384,15 @@ uint8_t LTC68042cell_nextVoltages(uint8_t triggerMode)
         {
             //then no conversion is in process or last one has completed
             conversionInProcess = false;
-
+          #ifdef WGC_DEBUG_ACQ_VS_LOOP
+            Serial.print(F("g"));
+            Serial.print(chipAddress);
+            #ifdef BMS_TYPE_LiBCM
+            Serial.print(cellVoltageRegister);
+            #endif
+            Serial.print(F("e"));
+            Serial.print(micros() - conversionStart_us);
+          #endif
           #ifndef BMS_TYPE_LiBCM
             // for MAX17843 BMS, do 12 cells at a time
             validateAndStoreNextMAX17843(chipAddress);
@@ -423,13 +429,12 @@ uint8_t LTC68042cell_nextVoltages(uint8_t triggerMode)
             }
           #endif
         }
-        //else {//WGCToDoLater: temporary debugging statement
-        //Serial.print(F("wG"));//WGCToDoLater: temporary debugging statement
-        //Serial.print(F(" el "));//WGCToDoLater: temporary debugging statement
-        //Serial.print(micros() - conversionStart_us);//WGCToDoLater: temporary debugging statement
-        //Serial.print(F(" of "));
-        //Serial.print(conversionExpectedDuration_us);//WGCToDoLater: temporary debugging statement
-        //}//WGCToDoLater: temporary debugging statement
+      #ifdef WGC_DEBUG_ACQ_VS_LOOP
+        else
+        {
+            Serial.print(F("wG")); // emit defer-gather mark
+        }
+      #endif
     }
 
     else if (presentState & (LTC_STATE_PROCESS | LTC_STATE_PROCESS_TRIGGERED))
@@ -452,6 +457,9 @@ uint8_t LTC68042cell_nextVoltages(uint8_t triggerMode)
 
         processAllCellVoltages(); //do math and store in LTC68042_result.c
         cellVoltageDataStatus = CELL_DATA_PROCESSED;
+      #ifdef WGC_DEBUG_ACQ_VS_LOOP
+        Serial.print(F("dp")); //emit defer-trigger mark
+      #endif
 
         if (presentState & LTC_STATE_PROCESS_TRIGGERED) { presentState = LTC_STATE_TRIGGER; } //trigger on next run
         else                                            { presentState = LTC_STATE_GATHER;  } //gather data on next run (a trigger has already happened)

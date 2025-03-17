@@ -138,7 +138,9 @@ void time_waitForLoopPeriod(void)
     timestamp_loopStart_previous_ms = timeNow_ms;
 
     if ((key_getSampledState() == KEYSTATE_ON) && (timingMet == false)) { Serial.print('*'); }
-    //else { Serial.print('+'); }//WGCToDoLater: debugging only
+  #ifdef WGC_DEBUG_ACQ_VS_LOOP
+    else { Serial.print('+'); } // emit met-timing-end-of-loop mark
+  #endif
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
