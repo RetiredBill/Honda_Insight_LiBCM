@@ -138,7 +138,7 @@
 
     #define WGC_BB1HW // running on RetiredBill's BB1 hardware, most HW not implimented
     //WGCToDo: All WGC_BB1HW references in the code must be removed before BB2
-    #define WGC_DEBUG_ACQ_VS_LOOP // enables useful serial console markers for debugging timeing/sequence of acquisition versus loop events and end
+    //#define WGC_DEBUG_ACQ_VS_LOOP // enables useful serial console markers for debugging timeing/sequence of acquisition versus loop events and end
     //#define RUN_BRINGUP_TESTER_MOTHERBOARD //requires external test PCB (that you don't have)
     //#define RUN_BRINGUP_TESTER_GRIDCHARGER //requires external test equipment
 
