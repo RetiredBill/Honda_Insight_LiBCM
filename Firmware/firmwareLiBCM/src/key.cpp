@@ -46,7 +46,6 @@ void key_handleKeyEvent_off(void)
     //LTC68042configure_communicationTest(); //WGCToDo: just an idea
     //LTC68042configure_VrefTest(); //WGCToDo: just an idea (haven't looked at what this entails)
     //LTC68042result_saneVoltagesTest(); //WGCToDo: just an idea
-    //WGCToDoNext: deal appropriately with failure of LTC68042configure_basicConfidenceTest()
     LTC68042configure_basicConfidenceTest();
     //temperature_thermistorTest(); //WGCToDo: just an idea
 

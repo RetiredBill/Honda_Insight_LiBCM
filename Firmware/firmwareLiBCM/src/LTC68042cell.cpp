@@ -74,7 +74,6 @@ void startCellConversion(void)
     //  Follow IS_DISCHARGE_ALLOWED_DURING_CONVERSION, and maybe make it run-time dynamic
 
     // Write M873_SCANCTRL to all devices to start a scan
-    //WGCToDoNow: use overSamples here!!!
     MAX1784Xcomms_writeAll843Reg(
       M873_SCANCTRL,
       TOTAL_IC,
