@@ -538,8 +538,6 @@ Serial.print(F(" fw"));//WGCToDoNow: debug only
 void testHelper_acquireAllCellVoltages(void)
 {
     while (LTC68042cell_nextVoltages() != CELL_DATA_PROCESSED) { ; } //gather new data
-for (uint8_t ic = 0; ic < TOTAL_IC; ic++) debugUSB_printOneICsCellVoltages( ic, FOUR_DECIMAL_PLACES);//WGCToDoNow: debug only
-Serial.println("");//WGCToDoNow: debug only
 }
 
 //helper function to set up a cell discharge circuit test
@@ -727,6 +725,18 @@ bool testHeper_DischargeTestTesting(
     return allICsPassed;
 }
 
+void testHelper_printCellVoltages(const __FlashStringHelper * title)
+{
+    //WGCToDo: maybe add my own dedicated debug mode instead of DEBUGUSB_STREAM_DEBUG ('$DISP=DBG' -> 'DB2')
+    if (debugUSB_dataTypeToStream_get() == DEBUGUSB_STREAM_DEBUG)
+    {
+        Serial.println(F("")); //newline
+        Serial.print(title);
+        for (uint8_t ic = 0; ic < TOTAL_IC; ic++) debugUSB_printOneICsCellVoltages( ic, FOUR_DECIMAL_PLACES);
+        Serial.println("");
+    }
+}
+
 void testHelper_printTestResults(uint16_t cellFailuresBitmap[])
 {
     bool allICsPassed = true;
@@ -774,17 +784,17 @@ bool LTC68042configure_basicConfidenceTest(void)
     cellBalance_set_cellsAreBalancing(YES);
 
     //================== start with resting cell voltages
-Serial.print(F(" T-r "));//WGCToDoNow: temporary debugging statement
     testHelper_finishInProcessAcquision();
     testHelper_acquireAllCellVoltages();
     testHelper_saveCellVoltages();
+    testHelper_printCellVoltages(F("Resting:")); // controlled by '$DISP=DBG'
 
     //================== now do even cells
-Serial.print(F(" T-e "));//WGCToDoNow: temporary debugging statement
     testHelper_setCellDischarge(TESTDISCHASRGE_EvenCellsBitMap);
 
     //measure and check while even cells are discharging
     testHelper_acquireAllCellVoltages();
+    testHelper_printCellVoltages(F("Even:")); // controlled by '$DISP=DBG'
     didTestFail &= testHelper_checkInterCellDeltaAndSaneCellVoltages(
       test1_cellStatusBitmap,            //cells not discharging
       test3_EvenTestCellFailsHighBitmap, //cell voltages that way high => open sense wire
@@ -792,11 +802,11 @@ Serial.print(F(" T-e "));//WGCToDoNow: temporary debugging statement
 
     //================== now do odd cells
     //  (Yes, some redundncy in detecting open sense wires)
-Serial.print(F(" T-o "));//WGCToDoNow: temporary debugging statement
     testHelper_setCellDischarge(TESTDISCHASRGE_OddCellsBitMap);
 
     //measure and check while odd cells are discharging
     testHelper_acquireAllCellVoltages();
+    testHelper_printCellVoltages(F("Odd:")); // controlled by '$DISP=DBG'
     didTestFail &= testHelper_checkInterCellDeltaAndSaneCellVoltages(
       test2_cellStatusBitmap,            //cells not discharging
       test5_OddTestCellFailsHighBitmap,  //cell voltages that way high => open sense wire
