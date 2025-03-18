@@ -46,7 +46,7 @@ void key_handleKeyEvent_off(void)
     //LTC68042configure_communicationTest(); //WGCToDo: just an idea
     //LTC68042configure_VrefTest(); //WGCToDo: just an idea (haven't looked at what this entails)
     //LTC68042result_saneVoltagesTest(); //WGCToDo: just an idea
-    //WGCToDoNow: deal appropriately with failure of LTC68042configure_basicConfidenceTest()
+    //WGCToDoNext: deal appropriately with failure of LTC68042configure_basicConfidenceTest()
     LTC68042configure_basicConfidenceTest();
     //temperature_thermistorTest(); //WGCToDo: just an idea
 
@@ -138,7 +138,7 @@ void keyOn_coldBootTasks(void)
     //initialize hardware
     gpio_turnPowerSensors_on();
     LTC68042configure_pulseChipSelectLow(SPECIFIED_MAX_WAKEUP_TIME_LTCCORE_MICROSECONDS); //wake LTC6804
-    LTC68042cell_nextVoltages(); //first call starts LTC6804 conversion
+    LTC68042cell_nextVoltages(LTC_TRIGGERMODE_CONTINUOUS); //first call starts LTC6804 conversion
     uint32_t timeSinceLTC6804conversionStarted_us = millis();
 
     //other startup initialization tasks
@@ -147,9 +147,8 @@ void keyOn_coldBootTasks(void)
     METSCI_enable();
     LED(3,ON);
 
-    //process cell voltages
-    while(millis() - timeSinceLTC6804conversionStarted_us < LTC6804_MAX_CONVERSION_TIME_ms) { ; } //wait for conversion to finish
-    while(LTC68042cell_nextVoltages() != CELL_DATA_PROCESSED) { ; } //read all cell voltages back
+    //read and process cell voltages, waiting for conversion to finish if needed
+    while(LTC68042cell_nextVoltages(LTC_TRIGGERMODE_CONTINUOUS) != CELL_DATA_PROCESSED) { ; } //read all cell voltages back
     vPackSpoof_setVoltage();
     SoC_setBatteryStateNow_percent(SoC_estimateFromRestingCellVoltage_percent());
     BATTSCI_enable(); //must occur after we have valid Vcell data

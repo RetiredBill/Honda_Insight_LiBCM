@@ -50,7 +50,7 @@ void MAX17841configure_disableMAX17841(void)
 /////////////////////////////////////////////////////////////////////////////////////////
 
 uint16_t MAX17841configure_calcAcquisitionTime_us(
-  uint8_t NumCells, bool Ain1En, bool Ain2En, uint8_t AinTime_counts, bool VblkEn, uint8_t DiagSel, uint8_t OvrSmpls,
+  uint8_t NumCells, bool Ain1En, bool Ain2En, uint8_t AinTime_counts, bool VblkEn, uint8_t DiagSel, uint8_t OvrSmplBf,
   bool AutoBalSwDisEn, uint8_t CellRecoveryTime_counts)
 {
     //WGCToDoLater: Many arguments will likely end up never changing.
@@ -62,19 +62,25 @@ uint16_t MAX17841configure_calcAcquisitionTime_us(
     // uint8_t AinTime_counts:  M873_ACQCFG_INIT_AINTIME
     // bool VblkEn:             M873_MEASUREEN_INIT_BLOCKEN
     // uint8_t DiagSel:         (BFN_GET(M873_DIAGCFG_bfDIAGSEL, M873_DIAGCFG_INIT))
-    // uint8_t OvrSmpls:        M873_SCANCTRL_INIT_OVSAMPL
+    // uint8_t OvrSmplBf:        M873_SCANCTRL_INIT_OVSAMPL
     // bool AutoBalSwDisEn:     M873_SCANCTRL_INIT_AUTOBALSWDIS
     // uint8_t CellRecoveryTime_counts: (BFN_GET(M873_ADR_bfCELL_RECOVERY_TIME, M873_ADR_INIT))
+
+    //take care of OVSAMPL bitfield mapping to oversamples
+    uint8_t overSamples;
+    if      (0 == OvrSmplBf) { overSamples =   1; }
+    else if (7 == OvrSmplBf) { overSamples = 128; }
+    else                     { overSamples = 1 << (OvrSmplBf + 1); }
 
     return M873_ACGTime_Initialization_us \
       + (Ain1En ? (M873_ACGTime_AUXINMeasurement_us + (M873_ACGTime_AUXINDelayPerCount_us * AinTime_counts)) : 0) \
       + (Ain2En ? (M873_ACGTime_AUXINMeasurement_us + (M873_ACGTime_AUXINDelayPerCount_us * AinTime_counts)) : 0) \
-      + OvrSmpls \
+      + overSamples \
          * (   (VblkEn ? (M873_ACGTime_VBLKP_measurement_us + M873_ACGTime_CellScanSetupVb_us) : M873_ACGTime_CellScanSetupNoVb_us) \
              + (NumCells * M873_ACGTime_CellScansPerCell_us) \
              + ((DiagSel == M873_DIAGSEL_DieTemperature) ? M873_ACGTime_DieTempMeasure_us : 0) \
            ) \
-      + M873_ACGTime_HVRecoveryPerOversmpl_us * (OvrSmpls - 1) \
+      + M873_ACGTime_HVRecoveryPerOversmpl_us * (overSamples - 1) \
       + (AutoBalSwDisEn ?  (M873_ACGTime_CellRecoveryTimePerCount_us * (CellRecoveryTime_counts + 1)) : 0);
 }
 
@@ -483,6 +489,7 @@ void LTC68042configure_wakeupIsoSPI(void)
 // For BMS_TYPE_WGCLiBCM, MAX1784x chips are automatically kept awake by MAX17841 keep-alive function,
 //   and this function now just returns the JUST_WOKE_UP vs ALREADY_AWAKE state;
 //   it doesn't wake anything up...
+//WGCToDoNext: CRITICAL if we slept, and sleep shut off MAX17841 to save power, and we wake up and don't do LTC68042configure_programVolatileDefaults() (like via LTC68042cell_nextVoltages()), but instead do something like LTC68042configure_setBalanceResistors(), THIS FAILS!
 bool LTC68042configure_wakeup(void)
 {
   #ifndef BMS_TYPE_WGCLiBCM
@@ -507,6 +514,8 @@ static int16_t  nonDischargingAverageDeltaV_counts = 0;
 static uint16_t test1_cellStatusBitmap[TOTAL_IC] = {0};
 static uint16_t test2_cellStatusBitmap[TOTAL_IC] = {0};
 
+/////////////////////////////////////////////////////////////////////////////////////////
+
 void LTC68042configure_enabletestDischargeFETs(void) {testDischargeState = TESTDISCHASRGESTATE_TURNON;}
 
 ///////// test helper functions
@@ -516,28 +525,6 @@ void testHelper_clearCellTestFlags(int16_t testFlagBitmap[])
     {
         testFlagBitmap[ic] = 0;
     }
-}
-
-
-//helper for optimized acquisition of cell volatges
-//  (LTC68042cell_acquireAllCellVoltages() might do 2 aquisitions when only 1 is required)
-// Note: this scheme is only optimum when used inside of a single blocking test function
-//WGCToDoNow: change this to access LTC68042cell_nextVoltages state without kicking off another acquisition
-void testHelper_finishInProcessAcquision(void)
-{
-    if (LTC68042cell_nextVoltages() != CELL_DATA_PROCESSED)
-    {
-        // then an acquisition is already underway,
-        // but can't be certain of operating condions. so...
-Serial.print(F(" fw"));//WGCToDoNow: debug only
-        while (LTC68042cell_nextVoltages() != CELL_DATA_PROCESSED) { ; } //clear old data
-    }
-    //and we can hold right there, as long as this is only called within a single blocking test routine
-}
-
-void testHelper_acquireAllCellVoltages(void)
-{
-    while (LTC68042cell_nextVoltages() != CELL_DATA_PROCESSED) { ; } //gather new data
 }
 
 //helper function to set up a cell discharge circuit test
@@ -784,8 +771,7 @@ bool LTC68042configure_basicConfidenceTest(void)
     cellBalance_set_cellsAreBalancing(YES);
 
     //================== start with resting cell voltages
-    testHelper_finishInProcessAcquision();
-    testHelper_acquireAllCellVoltages();
+    LTC68042cell_acquireAllCellVoltages(); //abandon any in-process acquisition (waiting for it to complete, if needed)
     testHelper_saveCellVoltages();
     testHelper_printCellVoltages(F("Resting:")); // controlled by '$DISP=DBG'
 
@@ -793,7 +779,7 @@ bool LTC68042configure_basicConfidenceTest(void)
     testHelper_setCellDischarge(TESTDISCHASRGE_EvenCellsBitMap);
 
     //measure and check while even cells are discharging
-    testHelper_acquireAllCellVoltages();
+    LTC68042cell_acquireAllCellVoltages();
     testHelper_printCellVoltages(F("Even:")); // controlled by '$DISP=DBG'
     didTestFail &= testHelper_checkInterCellDeltaAndSaneCellVoltages(
       test1_cellStatusBitmap,            //cells not discharging
@@ -805,7 +791,7 @@ bool LTC68042configure_basicConfidenceTest(void)
     testHelper_setCellDischarge(TESTDISCHASRGE_OddCellsBitMap);
 
     //measure and check while odd cells are discharging
-    testHelper_acquireAllCellVoltages();
+    LTC68042cell_acquireAllCellVoltages();
     testHelper_printCellVoltages(F("Odd:")); // controlled by '$DISP=DBG'
     didTestFail &= testHelper_checkInterCellDeltaAndSaneCellVoltages(
       test2_cellStatusBitmap,            //cells not discharging
@@ -818,22 +804,22 @@ bool LTC68042configure_basicConfidenceTest(void)
     //tell the world that cells are no longer balancing
     cellBalance_set_cellsAreBalancing(NO);
 
-//WGCToDoNow: simulated sense wire failures
-//test3_EvenTestCellFailsHighBitmap[0] = 0b111111111111111;
-//test4_EvenTestCellFailsLowBitmap[0]  = 0b111111111111111;
-//test3_EvenTestCellFailsHighBitmap[1] = 0b000000011000000;
-//test4_EvenTestCellFailsLowBitmap[1]  = 0b000000110000000;
-//test3_EvenTestCellFailsHighBitmap[2] = 0b111111111000000;
-//test4_EvenTestCellFailsLowBitmap[2]  = 0b111111110000000;
-//test3_EvenTestCellFailsHighBitmap[3] = 0b001100000000011;
-//test4_EvenTestCellFailsLowBitmap[3]  = 0b000110000000110;
+    //WGCToDoNext: simulated sense wire failures
+    //test3_EvenTestCellFailsHighBitmap[0] = 0b111111111111111;
+    //test4_EvenTestCellFailsLowBitmap[0]  = 0b111111111111111;
+    //test3_EvenTestCellFailsHighBitmap[1] = 0b000000011000000;
+    //test4_EvenTestCellFailsLowBitmap[1]  = 0b000000110000000;
+    //test3_EvenTestCellFailsHighBitmap[2] = 0b111111111000000;
+    //test4_EvenTestCellFailsLowBitmap[2]  = 0b111111110000000;
+    //test3_EvenTestCellFailsHighBitmap[3] = 0b001100000000011;
+    //test4_EvenTestCellFailsLowBitmap[3]  = 0b000110000000110;
 
     //test is done
     uint32_t now_ms = millis();
     errorCounts -= LTC68042result_errorCount_get();
     LTC68042cell_dischargeAllowedDuringConversion_set(IS_DISCHARGE_ALLOWED_DURING_CONVERSION);
 
-    Serial.print(F("\n+Basic BMS circuit test"));
+    Serial.print(F("\nBasic BMS circuit test"));
     Serial.print(F("\n   Acquisition errors: "));
     if (0 == errorCounts) { Serial.print(F("None. Test should be good")); }
     else
@@ -858,7 +844,7 @@ bool LTC68042configure_basicConfidenceTest(void)
     uint16_t openWireCellFlags = 0;
     for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
     {
-        //openWireCellFlags = test1_cellStatusBitmap[ic] & test2_cellStatusBitmap[ic];//WGCToDoNow: this is wrong
+        //openWireCellFlags = test1_cellStatusBitmap[ic] & test2_cellStatusBitmap[ic];//WGCToDoNext: this is wrong
         if (openWireCellFlags)
         {
             Serial.print(F(" IC "));
@@ -899,7 +885,7 @@ uint8_t LTC68042configure_testDischargeFETs(void)
 
 if (testDischargeState != TESTDISCHASRGESTATE_DISABLED) { //WGCToDo: debugging only
     uint32_t now_ms = millis();
-    Serial.print(F("\n+CellBalBIST state: "));
+    Serial.print(F("\nCellBalBIST state: "));
     Serial.print(testDischargeState);
     Serial.print(F(", now (ms): "));
     Serial.print(now_ms);
@@ -927,7 +913,7 @@ if (testDischargeState != TESTDISCHASRGESTATE_DISABLED) { //WGCToDo: debugging o
         cellBalance_set_cellsAreBalancing(YES);
 
         //get resting cell voltages
-        testHelper_acquireAllCellVoltages();
+        LTC68042cell_acquireAllCellVoltages();
         testHelper_saveCellVoltages();
 
         //start with even cells
@@ -943,7 +929,7 @@ if (testDischargeState != TESTDISCHASRGESTATE_DISABLED) { //WGCToDo: debugging o
     {
 
         //make another set of measurements
-        testHelper_acquireAllCellVoltages();
+        LTC68042cell_acquireAllCellVoltages();
 
         //testHelper_calculateVoltageDeltas(even, odd)
         testHelper_calculateVoltageDeltas(&dischargingAverageDeltaV_counts, &nonDischargingAverageDeltaV_counts);
@@ -978,7 +964,7 @@ if (testDischargeState != TESTDISCHASRGESTATE_DISABLED) { //WGCToDo: debugging o
         else
         {
           //make another set of measurements
-          testHelper_acquireAllCellVoltages();
+          LTC68042cell_acquireAllCellVoltages();
           //and continue waiting for laggards, or time expiration
         }
     }
@@ -997,7 +983,7 @@ if (testDischargeState != TESTDISCHASRGESTATE_DISABLED) { //WGCToDo: debugging o
     else if (testDischargeState == TESTDISCHASRGESTATE_WAITING_ODD)
     {
         //make another set of measurements
-        testHelper_acquireAllCellVoltages();
+        LTC68042cell_acquireAllCellVoltages();
 
         //testHelper_calculateVoltageDeltas(even, odd)
         testHelper_calculateVoltageDeltas(&nonDischargingAverageDeltaV_counts, &dischargingAverageDeltaV_counts);
@@ -1032,7 +1018,7 @@ if (testDischargeState != TESTDISCHASRGESTATE_DISABLED) { //WGCToDo: debugging o
         else
         {
           //make another set of measurements
-          testHelper_acquireAllCellVoltages();
+          LTC68042cell_acquireAllCellVoltages();
           //and continue waiting for laggards, or time expiration
         }
     }
