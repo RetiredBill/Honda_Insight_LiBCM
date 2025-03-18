@@ -50,7 +50,7 @@ void MAX17841configure_disableMAX17841(void)
 /////////////////////////////////////////////////////////////////////////////////////////
 
 uint16_t MAX17841configure_calcAcquisitionTime_us(
-  uint8_t NumCells, bool Ain1En, bool Ain2En, uint8_t AinTime_counts, bool VblkEn, uint8_t DiagSel, uint8_t OvrSmpls,
+  uint8_t NumCells, bool Ain1En, bool Ain2En, uint8_t AinTime_counts, bool VblkEn, uint8_t DiagSel, uint8_t OvrSmplBf,
   bool AutoBalSwDisEn, uint8_t CellRecoveryTime_counts)
 {
     //WGCToDoLater: Many arguments will likely end up never changing.
@@ -62,19 +62,25 @@ uint16_t MAX17841configure_calcAcquisitionTime_us(
     // uint8_t AinTime_counts:  M873_ACQCFG_INIT_AINTIME
     // bool VblkEn:             M873_MEASUREEN_INIT_BLOCKEN
     // uint8_t DiagSel:         (BFN_GET(M873_DIAGCFG_bfDIAGSEL, M873_DIAGCFG_INIT))
-    // uint8_t OvrSmpls:        M873_SCANCTRL_INIT_OVSAMPL
+    // uint8_t OvrSmplBf:        M873_SCANCTRL_INIT_OVSAMPL
     // bool AutoBalSwDisEn:     M873_SCANCTRL_INIT_AUTOBALSWDIS
     // uint8_t CellRecoveryTime_counts: (BFN_GET(M873_ADR_bfCELL_RECOVERY_TIME, M873_ADR_INIT))
+
+    //take care of OVSAMPL bitfield mapping to oversamples
+    uint8_t overSamples;
+    if      (0 == OvrSmplBf) { overSamples =   1; }
+    else if (7 == OvrSmplBf) { overSamples = 128; }
+    else                     { overSamples = 1 << (OvrSmplBf + 1); }
 
     return M873_ACGTime_Initialization_us \
       + (Ain1En ? (M873_ACGTime_AUXINMeasurement_us + (M873_ACGTime_AUXINDelayPerCount_us * AinTime_counts)) : 0) \
       + (Ain2En ? (M873_ACGTime_AUXINMeasurement_us + (M873_ACGTime_AUXINDelayPerCount_us * AinTime_counts)) : 0) \
-      + OvrSmpls \
+      + overSamples \
          * (   (VblkEn ? (M873_ACGTime_VBLKP_measurement_us + M873_ACGTime_CellScanSetupVb_us) : M873_ACGTime_CellScanSetupNoVb_us) \
              + (NumCells * M873_ACGTime_CellScansPerCell_us) \
              + ((DiagSel == M873_DIAGSEL_DieTemperature) ? M873_ACGTime_DieTempMeasure_us : 0) \
            ) \
-      + M873_ACGTime_HVRecoveryPerOversmpl_us * (OvrSmpls - 1) \
+      + M873_ACGTime_HVRecoveryPerOversmpl_us * (overSamples - 1) \
       + (AutoBalSwDisEn ?  (M873_ACGTime_CellRecoveryTimePerCount_us * (CellRecoveryTime_counts + 1)) : 0);
 }
 

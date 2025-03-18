@@ -60,13 +60,13 @@ void startCellConversion(void)
   #else
     // MAX17843 ICs
 
-    uint8_t overSamples = (LTC68042configure_acqusitionPrecision_get() ? 16 : M873_SCANCTRL_INIT_OVSAMPL);
+    uint8_t overSampleBf = (LTC68042configure_acqusitionPrecision_get() ? 3 : M873_SCANCTRL_INIT_OVSAMPL);
     //determine expected conversion/acquisition time based on acquisition parameters
     conversionExpectedDuration_us = MAX17841configure_calcAcquisitionTime_us(
       CELLS_PER_IC,
       M873_MEASUREEN_INIT_AIN1EN, M873_MEASUREEN_INIT_AIN2EN, M873_ACQCFG_INIT_AINTIME,
       M873_MEASUREEN_INIT_BLOCKEN, (BFN_GET(M873_DIAGCFG_bfDIAGSEL, M873_DIAGCFG_INIT)),
-      overSamples,
+      overSampleBf,
       M873_SCANCTRL_INIT_AUTOBALSWDIS, (BFN_GET(M873_ADR_bfCELL_RECOVERY_TIME, M873_ADR_INIT)));
     //WGCToDoNext: Need to look at impact of conversionExpectedDuration_us on keep-alive interval.
     //WGCToDoNext: 2025/03/10 M873_SCANCTRL_AUTOBALSWDIS is 0, allowing measurements while CB discharge is enabled.
@@ -78,7 +78,7 @@ void startCellConversion(void)
     MAX1784Xcomms_writeAll843Reg(
       M873_SCANCTRL,
       TOTAL_IC,
-      M873_SCANCTRL_INIT | BITVALUE(M873_SCANCTRL_SCAN),
+      BFN_MERG(M873_SCANCTRL_bfOVSAMPL, M873_SCANCTRL_INIT, overSampleBf) | BITVALUE(M873_SCANCTRL_SCAN),
       MCONT_FEW_PRTX);
     conversionStart_us = micros();
 
