@@ -566,12 +566,13 @@ void testHelper_setCellDischarge(uint16_t cellDischargeBitmap)
 //helper function that looks for:
 //  adjacent cell voltage absulut deltas greater than a minimum (indicating discharge circuit works)
 //  cell voltages not insanely high or low (indicating no open sense wires)
+// returns true if all tests pass
 bool testHelper_checkInterCellDeltaAndSaneCellVoltages(
    uint16_t cellFailsDeltaBitmap[], //cell bitmap for cells that are failing to discharge
    uint16_t cellFailsHighBitmap[],  //cell bitmap for cells with excessively high voltage
    uint16_t cellFailsLowBitmap[])   //cell bitmap for cells with excessively low voltage
 {
-    bool didTestFail = false;
+    bool didTestPass = true;
 
     for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
     {
@@ -605,10 +606,10 @@ bool testHelper_checkInterCellDeltaAndSaneCellVoltages(
                 }
             }
         }
-        if (cellFailsHighBitmap[ic] || cellFailsLowBitmap[ic]) { didTestFail = true; }
+        if (cellFailsHighBitmap[ic] || cellFailsLowBitmap[ic] || cellFailsDeltaBitmap[ic]) { didTestPass = false; }
     }
 
-    return didTestFail;
+    return didTestPass;
 }
 
 //helper function for waiting for odd/even delta voltage separation
@@ -759,7 +760,7 @@ void testHelper_printTestResults(uint16_t cellFailuresBitmap[])
 //Run quick basic confidence test on BMS circuits
 bool LTC68042configure_basicConfidenceTest(void)
 {
-    bool didTestFail = false;
+    bool didTestPass = true;
 
     //note test start time
     latestStateTimestamp_ms = millis();
@@ -790,7 +791,7 @@ bool LTC68042configure_basicConfidenceTest(void)
     //measure and check while even cells are discharging
     LTC68042cell_acquireAllCellVoltages();
     testHelper_printCellVoltages(F("Even:")); // controlled by '$DISP=DBG'
-    didTestFail &= testHelper_checkInterCellDeltaAndSaneCellVoltages(
+    didTestPass &= testHelper_checkInterCellDeltaAndSaneCellVoltages(
       test1_cellStatusBitmap,            //cells not discharging
       test3_EvenTestCellFailsHighBitmap, //cell voltages that way high => open sense wire
       test4_EvenTestCellFailsLowBitmap); //cell voltages that way low  => open sense wire
@@ -802,7 +803,7 @@ bool LTC68042configure_basicConfidenceTest(void)
     //measure and check while odd cells are discharging
     LTC68042cell_acquireAllCellVoltages();
     testHelper_printCellVoltages(F("Odd:")); // controlled by '$DISP=DBG'
-    didTestFail &= testHelper_checkInterCellDeltaAndSaneCellVoltages(
+    didTestPass &= testHelper_checkInterCellDeltaAndSaneCellVoltages(
       test2_cellStatusBitmap,            //cells not discharging
       test5_OddTestCellFailsHighBitmap,  //cell voltages that way high => open sense wire
       test6_OddTestCellFailsLowBitmap);  //cell voltages that way low  => open sense wire
@@ -818,18 +819,7 @@ bool LTC68042configure_basicConfidenceTest(void)
     errorCounts -= LTC68042result_errorCount_get();
     LTC68042cell_dischargeAllowedDuringConversion_set(IS_DISCHARGE_ALLOWED_DURING_CONVERSION);
 
-    //WGCToDoNow: simulated sense wire failures
-    //didTestFail = true;
-    //test3_EvenTestCellFailsHighBitmap[0] = 0b111111111111111;
-    //test4_EvenTestCellFailsLowBitmap[0]  = 0b111111111111111;
-    //test3_EvenTestCellFailsHighBitmap[1] = 0b000000011000000;
-    //test4_EvenTestCellFailsLowBitmap[1]  = 0b000000110000000;
-    //test3_EvenTestCellFailsHighBitmap[2] = 0b111111111000000;
-    //test4_EvenTestCellFailsLowBitmap[2]  = 0b111111110000000;
-    //test5_OddTestCellFailsHighBitmap[3] = 0b001100000000011;
-    //test4_EvenTestCellFailsLowBitmap[3]  = 0b000110000000110;
-
-    if (didTestFail)
+    if (! didTestPass)
     {
         Serial.print(F("\nBasic BMS circuit test"));
         Serial.print(F("\n   Acquisition errors: "));
@@ -903,7 +893,7 @@ bool LTC68042configure_basicConfidenceTest(void)
         Serial.print(now_ms - latestStateTimestamp_ms);
         Serial.println(")");
     }
-    return didTestFail;
+    return didTestPass;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
