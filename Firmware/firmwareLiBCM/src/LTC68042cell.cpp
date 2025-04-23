@@ -346,7 +346,7 @@ bool checkIfAdcWaitOver(void)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-void doCellDataGather(uint8_t triggerMode, uint8_t * presentState)
+uint8_t doCellDataGather(uint8_t triggerMode)
 {
   #ifdef WGC_DEBUG_ACQ_VS_LOOP
     Serial.print(F("g"));           // emit gather mark
@@ -357,6 +357,8 @@ void doCellDataGather(uint8_t triggerMode, uint8_t * presentState)
     Serial.print(F("e"));            //  elapsed time
     Serial.println(micros() - conversionStart_us);
   #endif
+
+    uint8_t nextPresentState = LTC_STATE_GATHER; // default to remaining in gather state
 
   #ifndef BMS_TYPE_LiBCM
     // for MAX17843 BMS, do 12 cells at a time
@@ -379,11 +381,11 @@ void doCellDataGather(uint8_t triggerMode, uint8_t * presentState)
             if (LTC_TRIGGERMODE_ROUND_ROBIN == triggerMode)
             {
                 startCellConversionAndResetCellCounters(); //start the next cell conversion //takes a while to finish
-                *presentState = LTC_STATE_PROCESS; //all cell voltages gathered.  Process data on next run.
+                nextPresentState = LTC_STATE_PROCESS; //all cell voltages gathered.  Process data on next run.
             }
             else if (LTC_TRIGGERMODE_TRIGGERED == triggerMode)
             {
-                *presentState = LTC_STATE_PROCESS_TRIGGERED; //all cell voltages gathered.  Process data on next run, but trigger after that
+                nextPresentState = LTC_STATE_PROCESS_TRIGGERED; //all cell voltages gathered.  Process data on next run, but trigger after that
             }
             else
             {
@@ -394,6 +396,7 @@ void doCellDataGather(uint8_t triggerMode, uint8_t * presentState)
   #ifdef BMS_TYPE_LiBCM
     }
   #endif
+    return nextPresentState;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -475,17 +478,17 @@ uint8_t LTC68042cell_nextVoltages(uint8_t triggerMode)
         }
     }
 
-    else if (LTC_STATE_GATHER == presentState) { doCellDataGather(triggerMode, &presentState); }
+    else if (LTC_STATE_GATHER == presentState) { presentState = doCellDataGather(triggerMode); }
 
-    //for LTC_WAITING_FOR_ADC: if done waiting, fall through to GATHERdon't gather data or advance the state if the current
+    //for LTC_WAITING_FOR_ADC: if done waiting, fall through to GATHER
+    //  don't gather data or advance the state if the current
     //  conversion is not complete (should not usually be necessary in key-on mode)
     else if (LTC_WAITING_FOR_ADC == presentState)
     {
         if (true == checkIfAdcWaitOver())
         {
             //then wait is over
-            doCellDataGather(triggerMode, &presentState); // do first gather
-            presentState = LTC_STATE_GATHER;
+            presentState = doCellDataGather(triggerMode); // do first gather
         }
       #ifdef WGC_DEBUG_ACQ_VS_LOOP
         else {Serial.print(F("wA"));  return false; }
@@ -553,7 +556,7 @@ uint8_t LTC68042cell_nextVoltages(uint8_t triggerMode)
 //  (Public method)
 void LTC68042cell_acquireAllCellVoltages(void)
 {
-    while (LTC68042cell_nextVoltages(LTC_TRIGGERMODE_FORCE_TRIGGERED) != DONE__READY_TO_TRIGGER)     { ; } //abandon any in-process acquisition (waiting for it to complete, if needed)
+    while (LTC68042cell_nextVoltages(LTC_TRIGGERMODE_FORCE_TRIGGERED) != DONE__READY_TO_TRIGGER)    { ; } //abandon any in-process acquisition (waiting for it to complete, if needed)
     while (LTC68042cell_nextVoltages(LTC_TRIGGERMODE_TRIGGERED)       != DONE__CELL_DATA_PROCESSED) { ; } //gather new data
 }
 
