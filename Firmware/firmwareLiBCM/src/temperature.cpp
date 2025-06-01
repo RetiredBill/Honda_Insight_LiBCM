@@ -62,11 +62,12 @@ void temperature_measureBattery(void)
 {
     int8_t batteryTemps[NUM_BATTERY_TEMP_SENSORS + 1] = {0}; //1-indexed ([1] = bay1 temp)
 
-  #if   defined(THERM_CONFIG_5AhG3) || defined(THERM_CONFIG_LiBCM_FoMoCo)
+  #if   defined(THERM_CONFIG_5AhG3) || defined(THERM_CONFIG_LiBCM_FoMoCo) \
+     || (defined(THERM_CONFIG_WGCLiBCM) && defined(WGC_BB3HW)) // BB3 has same as FoMoCo
     batteryTemps[1] = temperature_measureOneSensor_degC(PIN_TEMP_BAY1);
     batteryTemps[2] = temperature_measureOneSensor_degC(PIN_TEMP_BAY2);
     batteryTemps[3] = temperature_measureOneSensor_degC(PIN_TEMP_BAY3);
-    #if defined(THERM_CONFIG_LiBCM_FoMoCo)
+    #if (defined(THERM_CONFIG_LiBCM_FoMoCo) || (defined(THERM_CONFIG_WGCLiBCM) && defined(WGC_BB3HW)))
     batteryTemps[4] = temperature_measureOneSensor_degC(PIN_TEMP_GRN); //Top rear battery module
     batteryTemps[5] = temperature_measureOneSensor_degC(PIN_TEMP_YEL); //Top middle battery module
     #endif
@@ -89,7 +90,7 @@ void temperature_measureBattery(void)
   #if   defined(THERM_CONFIG_5AhG3)
             Serial.print(F("\nCheck Batt Temp Sensor! Bay: "));
             Serial.print(String(ii,DEC));
-  #elif defined(THERM_CONFIG_LiBCM_FoMoCo)
+  #elif defined(THERM_CONFIG_LiBCM_FoMoCo) || (defined(THERM_CONFIG_WGCLiBCM) && defined(WGC_BB3HW)) // BB3 has same as FoMoCo
           Serial.print(F("\nCheck Batt Temp Sensor!"));
           switch (ii) {
             case 1:
@@ -182,7 +183,7 @@ void temperature_measureAndPrintAll(void)
         Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_BAY2));
         Serial.print(F("\nBAY3: "));
         Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_BAY3));
-      #elif defined(THERM_CONFIG_LiBCM_FoMoCo)
+      #elif defined(THERM_CONFIG_LiBCM_FoMoCo) || (defined(THERM_CONFIG_WGCLiBCM) && defined(WGC_BB3HW)) // BB3 has same as FoMoCo
         Serial.print(F("\nGRN (Top rear battery module): "));
         Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_GRN));
         Serial.print(F("\nWHT (Intake): "));

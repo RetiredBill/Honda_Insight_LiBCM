@@ -136,7 +136,8 @@
 
     //don't modify these parameters unless you know what you're doing.  They are primary for mudder's internal testing
 
-    #define WGC_BB1HW // running on RetiredBill's BB1 hardware, most HW not implimented
+    //#define WGC_BB1HW // running on RetiredBill's BB1 hardware, most HW not implimented
+    #define WGC_BB3HW // running on stock LiBCM, with wgcMAX17Uart tacked on the back
     //WGCToDo: All WGC_BB1HW references in the code must be removed before BB2
     //#define WGC_DEBUG_ACQ_VS_LOOP // enables useful serial console markers for debugging timeing/sequence of acquisition versus loop events and end
     //#define RUN_BRINGUP_TESTER_MOTHERBOARD //requires external test PCB (that you don't have)
