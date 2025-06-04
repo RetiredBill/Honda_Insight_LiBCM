@@ -35,6 +35,23 @@
   #else
     #define FIRST_IC_ADDR  0 //lowest address.  All additional IC addresses must be sequential
     #define CELLS_PER_IC  12 //Each MAX17843 measures QTY12 cells
+    // map LiBCM "IC address" to MAX17843 device number and vice versa
+    //   devNum = mapIc2Dev[icNum]
+    //   icNum  = mapDev2Ic[devNum]
+    #ifdef WGC_BB1HW
+      // BB1: IC number is the same as device number
+      //                       IC number: 0  1  2  3  4
+      static const uint8_t mapIc2Dev[] = {0, 1, 2, 3, 4};
+      //                      dev number: 0  1  2  3  4
+      static const uint8_t mapDev2Ic[] = {0, 1, 2, 3, 4};
+    #else
+      // shortest UART daisy chain cable length in-car dictates different
+      //   order of modules, so...
+      //                       IC number: 0  1  2  3  4
+      static const uint8_t mapIc2Dev[] = {2, 1, 3, 0, 4};
+      //                      dev number: 0  1  2  3  4
+      static const uint8_t mapDev2Ic[] = {3, 1, 0, 2, 4};
+    #endif
   #endif
 
     //Acquisition time vs measurement accuracy trade-off

@@ -168,18 +168,19 @@ void LTC68042configure_setBalanceResistors(uint8_t icAddress, uint16_t cellBitma
     LTC68042configure_writeConfigRegisters(icAddress);
   #else
     //WGCToDo: softwareTimeout is LTC6804_DISCHARGE_TIMEOUT_02_SECONDS, which is 0! (as of 2/9/25)
+    int dev = mapIc2Dev[icAddress];
     // Set up watchdog timer for 2 sec
-    MAX1784Xcomms_writeDev843Reg(M873_TIMERCFG, icAddress, (BFN_PREP(M873_TIMERCFG_bfCBPDIV, 1) | BFN_PREP(M873_TIMERCFG_bfCBTIMER, 2)), MCONT_FULL_CHECKS);
+    MAX1784Xcomms_writeDev843Reg(M873_TIMERCFG, dev, (BFN_PREP(M873_TIMERCFG_bfCBPDIV, 1) | BFN_PREP(M873_TIMERCFG_bfCBTIMER, 2)), MCONT_FULL_CHECKS);
     //set cell switch bits
-    MAX1784Xcomms_writeDev843Reg(M873_BALSWEN, icAddress, BFN_PREP(M873_BALSWEN_bfBALSWEN, cellBitmap), MCONT_FULL_CHECKS);
+    MAX1784Xcomms_writeDev843Reg(M873_BALSWEN, dev, BFN_PREP(M873_BALSWEN_bfBALSWEN, cellBitmap), MCONT_FULL_CHECKS);
     //WGCToDo: might be time for a shadow register...
     if (cellBitmap) {
       // then enable cell balance (clear DEVCFG1.BALSWDISABLE)
-      MAX1784Xcomms_writeDev843Reg(M873_DEVCFG1, icAddress, (~BITVALUE(M873_DEVCFG1_BALSWDISABLE)) & M873_DEVCFG1_INIT, MCONT_FULL_CHECKS);
+      MAX1784Xcomms_writeDev843Reg(M873_DEVCFG1, dev, (~BITVALUE(M873_DEVCFG1_BALSWDISABLE)) & M873_DEVCFG1_INIT, MCONT_FULL_CHECKS);
     }
     else {
       //disable cell balance (set DEVCFG1.BALSWDISABLE)
-      MAX1784Xcomms_writeDev843Reg(M873_DEVCFG1, icAddress, BITVALUE(M873_DEVCFG1_BALSWDISABLE) | M873_DEVCFG1_INIT, MCONT_FULL_CHECKS);
+      MAX1784Xcomms_writeDev843Reg(M873_DEVCFG1, dev, BITVALUE(M873_DEVCFG1_BALSWDISABLE) | M873_DEVCFG1_INIT, MCONT_FULL_CHECKS);
     }
   #endif
 }
@@ -266,51 +267,51 @@ void LTC68042configure_programVolatileDefaults(void)
     // These all should return a data-check of DATA_CHECK_EXPECTED_POR
     // Get LSB of ID from ID1
     MAX1784Xcomms_readAll843Reg(M873_ID1, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
-    for (int DAx = 0; DAx < TOTAL_IC; DAx++) {
-        moduleId[DAx] = registerValue[DAx];
+    for (int ICx = 0; ICx < TOTAL_IC; ICx++) {
+        moduleId[ICx] = registerValue[mapIc2Dev[ICx]];
     }
     // Get MSB of ID and ROM CRC from ID2
     MAX1784Xcomms_readAll843Reg(M873_ID2, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
     Serial.println();
-    for (int DAx = 0; DAx < TOTAL_IC; DAx++) {
-        moduleId[DAx] += ((uint32_t)BFN_GET(M873_ID2_bfDEVIDMsb, registerValue[DAx]) << 16);
+    for (int ICx = 0; ICx < TOTAL_IC; ICx++) {
+        moduleId[ICx] += ((uint32_t)BFN_GET(M873_ID2_bfDEVIDMsb, registerValue[mapIc2Dev[ICx]]) << 16);
         Serial.print(F("Device "));
-        Serial.print(DAx);
+        Serial.print(ICx);
         Serial.print(F(" has ID: 0x"));
-        Serial.print(moduleId[DAx], HEX);
+        Serial.print(moduleId[ICx], HEX);
         Serial.print(F(" and ROM CRC: 0x"));
-        Serial.println(BFN_GET(M873_ID2_bfROMCRC, registerValue[DAx]), HEX);
+        Serial.println(BFN_GET(M873_ID2_bfROMCRC, registerValue[mapIc2Dev[ICx]]), HEX);
     }
 
     strcpy(msg, "device ");
     msg[7] = '0';
     strcpy(&(msg[8]), " Model/version");
     MAX1784Xcomms_readAll843Reg(M873_VERSION, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
-    for (int DAx = 0; DAx < TOTAL_IC; DAx++) {
-        msg[7] = (char)DAx + '0';
-        allOk &= MAX1784Xcomms_checkActualVsExpected(registerValue[DAx], M873_MODEL_VERSION, msg, __func__);
+    for (int ICx = 0; ICx < TOTAL_IC; ICx++) {
+        msg[7] = (char)ICx + '0';
+        allOk &= MAX1784Xcomms_checkActualVsExpected(registerValue[mapIc2Dev[ICx]], M873_MODEL_VERSION, msg, __func__);
     }
 
     // Read STATUS, and verify all just have M873_STATUS_ALRTRST set, with data-check of DATA_CHECK_EXPECTED_POR
     strcpy(&(msg[8]), " STATUS");
     MAX1784Xcomms_readAll843Reg(M873_STATUS, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
-    for (int DAx = 0; DAx < TOTAL_IC; DAx++) {
-        msg[7] = (char)DAx + '0';
-        allOk &= MAX1784Xcomms_checkActualVsExpected(registerValue[DAx], BITVALUE(M873_STATUS_ALRTRST), msg, __func__);
+    for (int ICx = 0; ICx < TOTAL_IC; ICx++) {
+        msg[7] = (char)ICx + '0';
+        allOk &= MAX1784Xcomms_checkActualVsExpected(registerValue[mapIc2Dev[ICx]], BITVALUE(M873_STATUS_ALRTRST), msg, __func__);
     }
 
     // Verify that FMEA1, FMEA2 values are all M873_CLEAR_ALL (should be after POR. Maybe only a warning?)
     strcpy(&(msg[8]), " FMEA1");
     MAX1784Xcomms_readAll843Reg(M873_FMEA1, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
-    for (int DAx = 0; DAx < TOTAL_IC; DAx++) {
-        msg[7] = (char)DAx + '0';
-        allOk &= MAX1784Xcomms_checkActualVsExpected(registerValue[DAx], M873_CLEAR_ALL, msg, __func__);
+    for (int ICx = 0; ICx < TOTAL_IC; ICx++) {
+        msg[7] = (char)ICx + '0';
+        allOk &= MAX1784Xcomms_checkActualVsExpected(registerValue[mapIc2Dev[ICx]], M873_CLEAR_ALL, msg, __func__);
     }
     strcpy(&(msg[8]), " FMEA2");
     MAX1784Xcomms_readAll843Reg(M873_FMEA2, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
-    for (int DAx = 0; DAx < TOTAL_IC; DAx++) {
-        msg[7] = (char)DAx + '0';
-        allOk &= MAX1784Xcomms_checkActualVsExpected(registerValue[DAx], M873_CLEAR_ALL, msg, __func__);
+    for (int ICx = 0; ICx < TOTAL_IC; ICx++) {
+        msg[7] = (char)ICx + '0';
+        allOk &= MAX1784Xcomms_checkActualVsExpected(registerValue[mapIc2Dev[ICx]], M873_CLEAR_ALL, msg, __func__);
     }
     //WGCToDo speedup: end of checks to defer
 
