@@ -664,8 +664,10 @@ bool MAX1784Xcomms_readAll843Reg(int regAddr, int Device_count, uint16_t * resul
   messageValid &= MAX1784Xcomms_checkAliveCount(rxAliveCount, Device_count, __func__);
 
   // pick up data payload read back from transfer buffer
+  // Note that bytes are in reverse device order, LSB first
   for (int DAx = 0; DAx < Device_count; DAx++) {
-    resultBuff[DAx] = (rxBuff[3 + (2 * DAx)] << 8) + rxBuff[2 + (2 * DAx)];
+    int regOffset = 2 * (Device_count - DAx);  // offset of LSB for given DAx
+    resultBuff[DAx] = (rxBuff[1 + regOffset] << 8) + rxBuff[regOffset];
   }
 
   return messageValid;
