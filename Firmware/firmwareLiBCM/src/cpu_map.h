@@ -15,19 +15,15 @@
           //Shut down pin for MAX17841
           #define PIN_SHDNL_MAX17841  30  //LiBCM not brought to PCB
         #elif defined WGC_BB3HW //WGCToDo
-          #define PIN_SHDNL_MAX17841  38  //LiBCM PIN_HW_VER1
-          #define PIN_SPI_CS          A1  //LiBCM PIN_USER_SW
+          #define PIN_SHDNL_MAX17841  35  //LiBCM not brought to PCB
+          #define PIN_SPI_CS          37  //LiBCM not brought to PCB
         #endif
 
         #define PIN_LATRIG          29 //WGCToDo: Debugging only. LiBCM not brought to PCB
-        #define PIN_LASIG           28 //WGCToDo: Debugging only. LiBCM not brought to PCB
+        #define PIN_LASIG           27 //WGCToDo: Debugging only. LiBCM not brought to PCB
 
         #define PIN_BATTCURRENT A0
-        #if defined WGC_BB3HW //WGCToDo
-          #define PIN_USER_SW     30  //LiBCM not brought to PCB
-        #else
-          #define PIN_USER_SW     A1
-        #endif
+        #define PIN_USER_SW     A1
         #define PIN_VPIN_IN     A2
         #define PIN_TEMP_YEL    A3 // 5AhG3: Exhaust, FoMoCo Top middle battery module
         #define PIN_TEMP_GRN    A4 // 5AhG3: Intake, FoMoCo Top rear battery module
@@ -57,11 +53,7 @@
         #define PIN_FAN_PWM        11
         #define PIN_HMI_EN         12
         #define PIN_IGNITION_SENSE 13
-        #if defined WGC_BB3HW //WGCToDo
-          #define PIN_HW_VER1        27  //LiBCM not brought to PCB
-        #else
-          #define PIN_HW_VER1        38
-        #endif
+        #define PIN_HW_VER1        38
         #define PIN_HW_VER0        39
         #define PIN_BATTSCI_REn    40
         #define PIN_BATTSCI_DE     41
