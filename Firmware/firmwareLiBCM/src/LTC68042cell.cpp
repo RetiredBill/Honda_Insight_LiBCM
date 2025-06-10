@@ -358,7 +358,8 @@ uint8_t LTC68042cell_nextVoltages(uint8_t triggerMode)
 
     if (LTC68042configure_wakeup() == LTC6804_CORE_JUST_WOKE_UP) { presentState = LTC_STATE_FIRSTRUN; }
 
-    if ((presentState & LTC_STATE_TRIGGER) || (LTC_TRIGGERMODE_FORCE_TRIGGERED == triggerMode))
+    if (    (presentState & LTC_STATE_TRIGGER)
+         || ((LTC_STATE_FIRSTRUN != presentState) && (LTC_TRIGGERMODE_FORCE_TRIGGERED == triggerMode)))
     {
         if ( ( ! conversionInProcess) || (conversionExpectedDuration_us < (micros() - conversionStart_us)) )
         {
@@ -371,7 +372,7 @@ uint8_t LTC68042cell_nextVoltages(uint8_t triggerMode)
             //then we need to wait for it to complete before starting ours, so don't advance presentState, and
             cellVoltageDataStatus = WAITING_TO_TRIGGER;
           #ifdef WGC_DEBUG_ACQ_VS_LOOP
-            Serial.print(F("wT")); //emit defer-trigger mark
+            Serial.print(F("wT")); //emit wait-trigger mark
           #endif
         }
     }
@@ -432,7 +433,7 @@ uint8_t LTC68042cell_nextVoltages(uint8_t triggerMode)
       #ifdef WGC_DEBUG_ACQ_VS_LOOP
         else
         {
-            Serial.print(F("wG")); // emit defer-gather mark
+            Serial.print(F("wG")); // emit gather-state mark
         }
       #endif
     }
@@ -458,7 +459,7 @@ uint8_t LTC68042cell_nextVoltages(uint8_t triggerMode)
         processAllCellVoltages(); //do math and store in LTC68042_result.c
         cellVoltageDataStatus = CELL_DATA_PROCESSED;
       #ifdef WGC_DEBUG_ACQ_VS_LOOP
-        Serial.print(F("dp")); //emit defer-trigger mark
+        Serial.print(F("dp")); //emit process-data mark
       #endif
 
         if (presentState & LTC_STATE_PROCESS_TRIGGERED) { presentState = LTC_STATE_TRIGGER; } //trigger on next run
@@ -467,6 +468,9 @@ uint8_t LTC68042cell_nextVoltages(uint8_t triggerMode)
 
     else if (presentState == LTC_STATE_FIRSTRUN)
     {
+      #ifdef WGC_DEBUG_ACQ_VS_LOOP
+        Serial.print(F("fR")); //emit first run mark
+      #endif
         //LTC6804 ICs were previously off
         LTC68042configure_programVolatileDefaults();
         startCellConversion();

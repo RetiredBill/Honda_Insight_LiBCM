@@ -234,9 +234,8 @@ void LTC68042configure_programVolatileDefaults(void)
     //    1uSec tau on SHDNl line, so low time should be ... This actually requires significant delay, so:
     //  Just write a 7 byte block (2 SPI bytes), and 1 command (1 SPI byte)
     //  => quicker to write 7 1 byte registers
-    //WGCToDo: Use LTC68042configure_wakeup() instead?
-    if ( (! MAX1784Xcomms_justWokeUp()) ||
-       (! MAX1784Xcomms_max17841_CheckForPOR()) ) { //WGCToDo: may not also need this condition
+    if (    (! MAX1784Xcomms_justWokeUp())
+         && (! MAX1784Xcomms_max17841_CheckForPOR()) ) {
         // then a full POR needs to be forced
         MAX1784Xcomms_max17843_reset();
         //NB: want to get the MAX1784Xcomms_max17841_Init() done promptly, to keep the keep-alive going
@@ -493,7 +492,6 @@ void LTC68042configure_wakeupIsoSPI(void)
 // For BMS_TYPE_WGCLiBCM, MAX1784x chips are automatically kept awake by MAX17841 keep-alive function,
 //   and this function now just returns the JUST_WOKE_UP vs ALREADY_AWAKE state;
 //   it doesn't wake anything up...
-//WGCToDoNext: CRITICAL if we slept, and sleep shut off MAX17841 to save power, and we wake up and don't do LTC68042configure_programVolatileDefaults() (like via LTC68042cell_nextVoltages()), but instead do something like LTC68042configure_setBalanceResistors(), THIS FAILS!
 bool LTC68042configure_wakeup(void)
 {
   #ifndef BMS_TYPE_WGCLiBCM
