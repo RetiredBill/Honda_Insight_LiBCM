@@ -10,7 +10,7 @@ bool m873JustWokeUp = true;
 bool MAX1784Xcomms_justWokeUp(void)                    { return m873JustWokeUp; }
 void MAX1784Xcomms_setJustWokeUpState(bool justWokeUp) { m873JustWokeUp = justWokeUp; }
 
-bool max871JustWokeUp = true; // first message received state
+bool max871FirstMessageFlag = true; // first message received state
 
 uint8_t m873AliveCountSeed = ALIVE_COUNT_DISABLE; // (private) MAX17843 alive-count message ID tracker
 void MAX1784Xcomms_enableAliveCount(void)  { m873AliveCountSeed = ALIVE_COUNT_ENABLE; }
@@ -144,7 +144,7 @@ void MAX1784Xcomms_max17843_reset(void)
   // This will change to no longer returning alive-count, so
   MAX1784Xcomms_disableAliveCount();  // disable alive-count checking
   MAX1784Xcomms_setExpectedDataCheck(DATA_CHECK_EXPECTED_POR);
-  max871JustWokeUp = true; //WGCToDo: seems like this should be in MAX1784Xcomms_max17841_shutdown(), but it works here...
+  max871FirstMessageFlag = true;
   // Force POR on all MAX17843 chips
   //  7 DEVCFG1.FORCEPOR  set
   //  0 DEVCFG1.SPOR      set
@@ -385,9 +385,9 @@ digitalWrite(PIN_LASIG, HIGH);
     //WGCToDo: checking more status bits than just these for now...
     cmd[0] = M871_READREG_RX_BYTE;
     LTC68042configure_spiWriteRead(cmd, 1, rxBuff, 1);
-    if (max871JustWokeUp) {
+    if (max871FirstMessageFlag) {
       // then this is the first usage, and Last_Byte should be 0
-      max871JustWokeUp = false;
+      max871FirstMessageFlag = false;
       allOK &= MAX1784Xcomms_checkActualVsExpected(
         ( (   BITVALUE(M871_RX_BYTE_First_Byte)
             | BITVALUE(M871_RX_BYTE_Byte_Error)
