@@ -495,5 +495,5 @@
     uint8_t LTC68042configure_testDischargeFETs(void);
     bool LTC68042configure_basicConfidenceTest(void);
     uint16_t MAX17841configure_calcAcquisitionTime_us(
-    uint8_t NumCells, bool Ain1En, bool Ain2En, uint8_t AinTime_counts, bool VblkEn, uint8_t DiagSel, uint8_t OvrSmpls,
+      uint8_t NumCells, bool Ain1En, bool Ain2En, uint8_t AinTime_counts, bool VblkEn, uint8_t DiagSel, uint8_t OvrSmpls,
       bool AutoBalSwDisEn, uint8_t CellRecoveryTime_counts);

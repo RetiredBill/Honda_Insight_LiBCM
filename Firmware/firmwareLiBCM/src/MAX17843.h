@@ -170,7 +170,6 @@
   // Cell balancing configuration registers
 
   #define M873_TIMERCFG                  0x18 //=========== register address
-  // aka WATCHDOG Register
   // TIMERCFG (aka WATCHDOG) register bit positions
   //#define M873_TIMERCFG_Reserved            15
   #define M873_TIMERCFG_bfCBPDIV_SHIFT      12
@@ -181,7 +180,6 @@
   //#define M873_TIMERCFG_bfReserved_SIZE        8
 
   #define M873_ADR                       0x0C //=========== register address
-  // aka AUTOBALSWDIS Delay Register
   // ADR (aka AUTOBALSWDIS Delay Register) register bit positions
   #define M873_ADR_bfDIAG_RECOVERY_TIME_SHIFT     8
   #define M873_ADR_bfDIAG_RECOVERY_TIME_SIZE        8
@@ -285,7 +283,7 @@
     // Once per acquisition: --------------------------------------------------------------------------
     // C15: AUXIN measurement (if enabled)         10                c (D34 or E34) If AUXINx is enabled
     // C16: AUXIN measurement (if enabled)        106 x AINTIME[5:0] c (F34) (D34 or E34) If AUXINx is enabled
-    // xxxx: Cell recovery time                    96 x (CRT + 1)    ? if AUTOBALSWDIS is enabled
+    // xxxx: Cell recovery time                    96 x (CRT + 1)    d if AUTOBALSWDIS is enabled
     //                                                               c   CRT if DELAYSEL is 0, DRT if 1
     // After every measurement cycle except the last: -------------------------------------------------
     // C19: HV recovery (if oversampling enabled) 100.3 x m          d (I34) For m = Number of oversamples
