@@ -321,6 +321,28 @@ void LTC68042configure_programVolatileDefaults(void)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
+// Fatal Error terminal routine
+// Display the specified error message on the LCD display, beep, and turn off LiBCM
+void LTC68042configure_anounceFatalErrorAndDie(uint8_t warningToDisplay)
+{
+    lcdTransmit_begin();
+    delay(50); //delay doesn't matter because this is a fatal error
+    lcdTransmit_displayOn();
+    delay(50); //delay doesn't matter because this is a fatal error
+    lcdTransmit_Warning(warningToDisplay);
+
+    gpio_turnBuzzer_on_highFreq(); //call GPIO directly
+
+    wdt_disable(); //turn off watchdog to prevent reset
+    wdt_enable(WDTO_8S);
+
+    delay(7000); //give the user enough time to read error message
+
+    gpio_turnLiBCM_off(); //game over... thanks for playing
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+
 // For MAX17843, must do a helloall() to start, which returns the
 //   number of devices found. So, this function WILL be called when LiBCM first boots.
 //WGCToDo: "we don't have time to run this test if the key is on when LiBCM first boots" may be
@@ -389,20 +411,7 @@ bool LTC68042configure_doesActualPackSizeMatchUserConfig(void)
                     else                                      { Serial.print(F("pass")); }
                 }
       #endif
-                lcdTransmit_begin();
-                delay(50); //delay doesn't matter because this is a fatal error
-                lcdTransmit_displayOn();
-                delay(50); //delay doesn't matter because this is a fatal error
-                lcdTransmit_Warning(LCD_WARN_CELL_COUNT);
-
-                gpio_turnBuzzer_on_highFreq(); //call GPIO directly
-
-                wdt_disable(); //turn off watchdog to prevent reset
-                wdt_enable(WDTO_8S);
-
-                delay(7000); //give the user enough time to read error message
-
-                gpio_turnLiBCM_off(); //game over... thanks for playing
+                LTC68042configure_anounceFatalErrorAndDie(LCD_WARN_CELL_COUNT); //game over... thanks for playing
             }
       #ifndef BMS_TYPE_WGCLiBCM
         }
@@ -559,12 +568,13 @@ void testHelper_setCellDischarge(uint16_t cellDischargeBitmap)
 //helper function that looks for:
 //  adjacent cell voltage absulut deltas greater than a minimum (indicating discharge circuit works)
 //  cell voltages not insanely high or low (indicating no open sense wires)
+// returns true if all tests pass
 bool testHelper_checkInterCellDeltaAndSaneCellVoltages(
    uint16_t cellFailsDeltaBitmap[], //cell bitmap for cells that are failing to discharge
    uint16_t cellFailsHighBitmap[],  //cell bitmap for cells with excessively high voltage
    uint16_t cellFailsLowBitmap[])   //cell bitmap for cells with excessively low voltage
 {
-    bool didTestFail = false;
+    bool didTestPass = true;
 
     for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
     {
@@ -598,10 +608,10 @@ bool testHelper_checkInterCellDeltaAndSaneCellVoltages(
                 }
             }
         }
-        if (cellFailsHighBitmap[ic] || cellFailsLowBitmap[ic]) { didTestFail = true; }
+        if (cellFailsHighBitmap[ic] || cellFailsLowBitmap[ic] || cellFailsDeltaBitmap[ic]) { didTestPass = false; }
     }
 
-    return didTestFail;
+    return didTestPass;
 }
 
 //helper function for waiting for odd/even delta voltage separation
@@ -752,7 +762,7 @@ void testHelper_printTestResults(uint16_t cellFailuresBitmap[])
 //Run quick basic confidence test on BMS circuits
 bool LTC68042configure_basicConfidenceTest(void)
 {
-    bool didTestFail = false;
+    bool didTestPass = true;
 
     //note test start time
     latestStateTimestamp_ms = millis();
@@ -783,7 +793,7 @@ bool LTC68042configure_basicConfidenceTest(void)
     //measure and check while even cells are discharging
     LTC68042cell_acquireAllCellVoltages();
     testHelper_printCellVoltages(F("Even:")); // controlled by '$DISP=DBG'
-    didTestFail &= testHelper_checkInterCellDeltaAndSaneCellVoltages(
+    didTestPass &= testHelper_checkInterCellDeltaAndSaneCellVoltages(
       test1_cellStatusBitmap,            //cells not discharging
       test3_EvenTestCellFailsHighBitmap, //cell voltages that way high => open sense wire
       test4_EvenTestCellFailsLowBitmap); //cell voltages that way low  => open sense wire
@@ -795,7 +805,7 @@ bool LTC68042configure_basicConfidenceTest(void)
     //measure and check while odd cells are discharging
     LTC68042cell_acquireAllCellVoltages();
     testHelper_printCellVoltages(F("Odd:")); // controlled by '$DISP=DBG'
-    didTestFail &= testHelper_checkInterCellDeltaAndSaneCellVoltages(
+    didTestPass &= testHelper_checkInterCellDeltaAndSaneCellVoltages(
       test2_cellStatusBitmap,            //cells not discharging
       test5_OddTestCellFailsHighBitmap,  //cell voltages that way high => open sense wire
       test6_OddTestCellFailsLowBitmap);  //cell voltages that way low  => open sense wire
@@ -806,67 +816,86 @@ bool LTC68042configure_basicConfidenceTest(void)
     //tell the world that cells are no longer balancing
     cellBalance_set_cellsAreBalancing(NO);
 
-    //WGCToDoNext: simulated sense wire failures
-    //test3_EvenTestCellFailsHighBitmap[0] = 0b111111111111111;
-    //test4_EvenTestCellFailsLowBitmap[0]  = 0b111111111111111;
-    //test3_EvenTestCellFailsHighBitmap[1] = 0b000000011000000;
-    //test4_EvenTestCellFailsLowBitmap[1]  = 0b000000110000000;
-    //test3_EvenTestCellFailsHighBitmap[2] = 0b111111111000000;
-    //test4_EvenTestCellFailsLowBitmap[2]  = 0b111111110000000;
-    //test3_EvenTestCellFailsHighBitmap[3] = 0b001100000000011;
-    //test4_EvenTestCellFailsLowBitmap[3]  = 0b000110000000110;
-
     //test is done
     uint32_t now_ms = millis();
     errorCounts -= LTC68042result_errorCount_get();
     LTC68042cell_dischargeAllowedDuringConversion_set(IS_DISCHARGE_ALLOWED_DURING_CONVERSION);
 
-    Serial.print(F("\nBasic BMS circuit test"));
-    Serial.print(F("\n   Acquisition errors: "));
-    if (0 == errorCounts) { Serial.print(F("None. Test should be good")); }
+    if (! didTestPass)
+    {
+        Serial.print(F("\nBasic BMS circuit test"));
+        Serial.print(F("\n   Acquisition errors: "));
+        if (0 == errorCounts) { Serial.print(F("None. Test should be good")); }
+        else
+        {
+            Serial.print(F("ERRORS OCCURRED. Test results may not be accurate, but there are other issues"));
+        }
+        Serial.print(F("\n   Discharge Circuit EVEN cell test: "));
+        testHelper_printTestResults(test1_cellStatusBitmap);
+        Serial.print(F("\n   Discharge Circuit ODD  cell test: "));
+        testHelper_printTestResults(test2_cellStatusBitmap);
+        Serial.print(F("\n   HIGH Cells EVEN cell test: "));
+        testHelper_printTestResults(test3_EvenTestCellFailsHighBitmap);
+        Serial.print(F("\n   LOW  Cells EVEN cell test: "));
+        testHelper_printTestResults(test4_EvenTestCellFailsLowBitmap);
+        Serial.print(F("\n   HIGH Cells ODD  cell test: "));
+        testHelper_printTestResults(test5_OddTestCellFailsHighBitmap);
+        Serial.print(F("\n   LOW  Cells ODD  cell test: "));
+        testHelper_printTestResults(test6_OddTestCellFailsLowBitmap);
+        Serial.println("");
+
+        uint16_t dischargeCellFlags = 0;
+        uint16_t openWireCellFlags = 0;
+        for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
+        {
+            dischargeCellFlags =    test1_cellStatusBitmap[ic]
+                                  | test2_cellStatusBitmap[ic];
+            if (dischargeCellFlags)
+            {
+                Serial.print(F(" IC "));
+                Serial.print(ic);
+                Serial.print(F(" cells "));
+                for (uint8_t cellNumber = 0 ; cellNumber < CELLS_PER_IC; cellNumber++)
+                {
+                    if (dischargeCellFlags & (1 << cellNumber)) {
+                         Serial.print(cellNumber);
+                         Serial.print(F(", "));
+                    }
+                }
+                Serial.println(F("\n   likely have faulty LiBCM Cell Balance circuits"));
+            }
+
+            openWireCellFlags =    test3_EvenTestCellFailsHighBitmap[ic]
+                                 | test4_EvenTestCellFailsLowBitmap[ic]
+                                 | test5_OddTestCellFailsHighBitmap[ic]
+                                 | test6_OddTestCellFailsLowBitmap[ic];
+            if (openWireCellFlags)
+            {
+                Serial.print(F(" IC "));
+                Serial.print(ic);
+                Serial.print(F(" cells "));
+                for (uint8_t cellNumber = 0 ; cellNumber < CELLS_PER_IC; cellNumber++)
+                {
+                    if (openWireCellFlags & (1 << cellNumber)) {
+                         Serial.print(cellNumber);
+                         Serial.print(F(", "));
+                    }
+                }
+                Serial.println(F("\n   likely have open sense cable wire connections"));
+            }
+        }
+        Serial.print(F("\nBasic BMS test FAILED!   (elapsed test time (ms): "));
+        Serial.print(now_ms - latestStateTimestamp_ms);
+        Serial.println(")");
+        LTC68042configure_anounceFatalErrorAndDie(LCD_WARN_BASIC_TEST); //game over... thanks for testing
+    }
     else
     {
-        Serial.print(F("ERRORS OCCURRED. Test results may not be accurate, but there are other issues"));
+        Serial.print(F("\nBasic BMS test passed (elapsed test time (ms): "));
+        Serial.print(now_ms - latestStateTimestamp_ms);
+        Serial.println(")");
     }
-    Serial.print(F("\n   Discharge Circuit EVEN cell test: "));
-    testHelper_printTestResults(test1_cellStatusBitmap);
-    Serial.print(F("\n   Discharge Circuit ODD  cell test: "));
-    testHelper_printTestResults(test2_cellStatusBitmap);
-    Serial.print(F("\n   HIGH Cells EVEN cell test: "));
-    testHelper_printTestResults(test3_EvenTestCellFailsHighBitmap);
-    Serial.print(F("\n   LOW  Cells EVEN cell test: "));
-    testHelper_printTestResults(test4_EvenTestCellFailsLowBitmap);
-    Serial.print(F("\n   HIGH Cells ODD  cell test: "));
-    testHelper_printTestResults(test5_OddTestCellFailsHighBitmap);
-    Serial.print(F("\n   LOW  Cells ODD  cell test: "));
-    testHelper_printTestResults(test6_OddTestCellFailsLowBitmap);
-    Serial.println("");
-
-    //create common language failure report
-    uint16_t openWireCellFlags = 0;
-    for (uint8_t ic = 0; ic < TOTAL_IC; ic++)
-    {
-        //openWireCellFlags = test1_cellStatusBitmap[ic] & test2_cellStatusBitmap[ic];//WGCToDoNext: this is wrong
-        if (openWireCellFlags)
-        {
-            Serial.print(F(" IC "));
-            Serial.print(ic);
-            Serial.print(F(" cells "));
-            for (uint8_t cellNumber = 0 ; cellNumber < CELLS_PER_IC; cellNumber++)
-            {
-                if (openWireCellFlags & (1 << cellNumber)) {
-                     Serial.print(cellNumber);
-                     Serial.print(F(", "));
-                }
-            }
-            Serial.println(F("\n   likely have open sense cable wire connections"));
-        }
-    }
-    Serial.print(F("\n   Elapsed test time (ms): "));
-    Serial.print(now_ms - latestStateTimestamp_ms);
-    Serial.println("");
-
-    return didTestFail;
+    return didTestPass;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
