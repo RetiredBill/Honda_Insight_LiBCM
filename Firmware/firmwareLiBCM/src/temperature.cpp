@@ -168,7 +168,7 @@ void temperature_measureAndPrintAll(void)
         Serial.print(F("\nTemperatures(C):"));
         Serial.print(F("\nBLU (Charger): "));
         Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_BLU));
-      #if   defined(THERM_CONFIG_5AhG3) || defined(THERM_CONFIG_WGCLiBCM)
+      #if   defined(THERM_CONFIG_5AhG3) || (defined(THERM_CONFIG_WGCLiBCM) && ( ! defined(WGC_BB3HW)))
         Serial.print(F("\nGRN (Intake): "));
         Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_GRN));
         Serial.print(F("\nWHT (Ambient): "));
