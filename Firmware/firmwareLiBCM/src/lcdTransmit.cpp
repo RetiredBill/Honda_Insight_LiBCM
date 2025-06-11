@@ -109,7 +109,11 @@ bool lcd_printTime_unitless(void)
 
     lcd2.setCursor(0,3);
 
+  #ifdef WGC_DEBUG_SPEEDUP_MODE_CHANGES
+    if (false)
+  #else
     if (cycleFrameNumber == CYCLEFRAME_A)
+  #endif
     {
         //"FWuuuu" //firmware expiration time in hours
         lcd2.print(F("FW"));
@@ -128,8 +132,12 @@ bool lcd_printTime_unitless(void)
             didscreenUpdateOccur = SCREEN_UPDATED;
         }
     }
+  #ifdef WGC_DEBUG_SPEEDUP_MODE_CHANGES
+    else if (true)
+  #else
     else if (cycleFrameNumber == CYCLEFRAME_B)
-    {
+  #endif
+   {
         //"tuuuuu" //keyOn uptime in seconds
         lcd2.print(F("t"));
 
