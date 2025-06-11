@@ -437,7 +437,7 @@ void LTC68042configure_initialize(void)
     #ifdef WGC_BB3HW
       pinMode(PIN_SPI_CS, OUTPUT);
     #endif
-    spi_enable(SPI_CLOCK_DIV64); //JTS2doLater: increase clock speed //DIV16 & DIV32 work on bench
+    spi_enable(SPI_CLOCK_DIV64); //WGCToDo: increase clock speed //DIV16 & DIV32 work on bench
     //spi_enable(SPI_CLOCK_DIV16);//WGCToDo: works, but need some tweaking
     //spi_enable(SPI_CLOCK_DIV8);//WGCToDo: probably works, but need even more tweaking
   #endif
