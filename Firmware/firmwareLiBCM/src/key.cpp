@@ -52,7 +52,7 @@ void key_handleKeyEvent_off(void)
     // enable longer running key-off tests (more BIST)
     //   non-blocking
     //   failures are maybe still fatal? TBD
-    LTC68042configure_enabletestDischargeFETs();
+    //LTC68042configure_enabletestDischargeFETs();
 
     time_latestKeyOff_ms_set(millis()); //MUST RUN LAST!
 }

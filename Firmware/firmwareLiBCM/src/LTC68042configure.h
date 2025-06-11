@@ -455,7 +455,7 @@
   #ifdef BMS_TYPE_LiBCM
     #define TESTBASIC_DELTA_TESTLIMIT_counts  30 //WGCToDoNext: this limit surely needs refinement, and likely won't work in BMS_TYPE_WGCLiBCM at all
   #else
-    #define TESTBASIC_DELTA_TESTLIMIT_counts  12 //WGCToDoNext: this limit surely needs refinement
+    #define TESTBASIC_DELTA_TESTLIMIT_counts  10 //WGCToDoNext: this limit surely needs refinement
   #endif
 
     //======================= testDischargeFETs defines
