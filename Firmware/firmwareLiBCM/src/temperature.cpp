@@ -43,7 +43,12 @@ void     temperature_ModuleTherm_setLatest_counts(uint8_t icAddress, uint8_t the
 //only call inside handler (to ensure sensors powered)
 void temperature_measureOEM(void)
 {
-    tempCharger = temperature_measureOneSensor_degC(PIN_TEMP_BLU);
+    #ifdef WGC_BB1HW
+      // no grid charger temp sensor
+      tempCharger = ROOM_TEMP_DEGC;
+    #else
+      tempCharger = temperature_measureOneSensor_degC(PIN_TEMP_BLU);
+    #endif
     #if  defined(THERM_CONFIG_5AhG3) || defined(THERM_CONFIG_WGCLiBCM)
         tempIntake  = temperature_measureOneSensor_degC(PIN_TEMP_GRN);
         tempExhaust = temperature_measureOneSensor_degC(PIN_TEMP_YEL);
