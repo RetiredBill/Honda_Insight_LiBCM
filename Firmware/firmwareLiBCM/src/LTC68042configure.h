@@ -364,8 +364,9 @@
       (M873_DIAGCFG_INIT_bfDIAGSEL     << M873_DIAGCFG_bfDIAGSEL_SHIFT   )
 
     // MAX17843 ADR register bit value config defaults
+    //  each count is 96uSec delay
     #define M873_ADR_INIT_bfDIAG_RECOVERY_TIME 0x00
-    #define M873_ADR_INIT_bfCELL_RECOVERY_TIME 0x00
+    #define M873_ADR_INIT_bfCELL_RECOVERY_TIME 0x04 //WGCToDo: 480 uSec WAG for delay
 
     #define M873_ADR_INIT \
       (M873_ADR_INIT_bfDIAG_RECOVERY_TIME << M873_ADR_bfDIAG_RECOVERY_TIME_SHIFT) + \

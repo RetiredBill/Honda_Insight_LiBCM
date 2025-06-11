@@ -899,6 +899,9 @@ void MAX1784Xcomms_setup843Registers(int Device_count)
   // set DIAGCFG
   MAX1784Xcomms_writeAll843Reg(M873_DIAGCFG, Device_count, M873_DIAGSEL_DieTemperature, MCONT_FULL_CHECKS);
 
+  // set ADR
+  MAX1784Xcomms_writeAll843Reg(M873_ADR, Device_count, M873_ADR_INIT, MCONT_FULL_CHECKS);
+
   // and wake-up is complete
   MAX1784Xcomms_setJustWokeUpState(false);
 }
