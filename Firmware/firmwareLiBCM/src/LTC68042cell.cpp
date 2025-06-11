@@ -16,6 +16,9 @@ uint8_t  chipAddress = FIRST_IC_ADDR;
 char     cellVoltageRegister = 'A'; //LTC68042 contains QTY4 CVRs (A/B/C/D)
 uint32_t conversionExpectedDuration_us = (LTC6804_MAX_CONVERSION_TIME_ms * 1000);
 uint32_t conversionStart_us = 0;
+#ifdef BMS_TYPE_WGCLiBCM
+bool     autoBalSwDis = false;
+#endif
 
 //JTS2doLater: Add cell voltage test that sets user alert if a cell voltage suddenly changes from 'balanced' to 'majorly imbalanced'
 
@@ -58,24 +61,38 @@ void startCellConversionAndResetCellCounters(void)
   #else
     // MAX17843 ICs
 
+    //WGCToDo: convert magic number to a macro
     uint8_t overSampleBf = (LTC68042configure_acqusitionPrecision_get() ? 3 : M873_SCANCTRL_INIT_OVSAMPL);
+    // Set AUTOBALSWDIS based on cellBalance_areCellsBalancing() and dcp_State
+    //  autoBalSwDis    dcp_State  cellBalance_areCellsBalancing()
+    //  0               0          0    Normal operation (key-on, or key-off not balanceing)
+    //  1               0          1    Normal (key-off) balancing
+    //  0               1          0    Not expected
+    //  0               1          1    BIST of discharge switches
+    autoBalSwDis = ((cellBalance_areCellsBalancing() && (! dcp_State)) ? 1 : M873_SCANCTRL_INIT_AUTOBALSWDIS);
+
     //determine expected conversion/acquisition time based on acquisition parameters
     conversionExpectedDuration_us = MAX17841configure_calcAcquisitionTime_us(
       CELLS_PER_IC,
       M873_MEASUREEN_INIT_AIN1EN, M873_MEASUREEN_INIT_AIN2EN, M873_ACQCFG_INIT_AINTIME,
       M873_MEASUREEN_INIT_BLOCKEN, (BFN_GET(M873_DIAGCFG_bfDIAGSEL, M873_DIAGCFG_INIT)),
       overSampleBf,
-      M873_SCANCTRL_INIT_AUTOBALSWDIS, (BFN_GET(M873_ADR_bfCELL_RECOVERY_TIME, M873_ADR_INIT)));
+      autoBalSwDis, (BFN_GET(M873_ADR_bfCELL_RECOVERY_TIME, M873_ADR_INIT)));
     //WGCToDoNext: Need to look at impact of conversionExpectedDuration_us on keep-alive interval.
     //WGCToDoNext: 2025/03/10 M873_SCANCTRL_AUTOBALSWDIS is 0, allowing measurements while CB discharge is enabled.
     //  This is good for BIST, but might be an issue for SoC during balancing.
     //  Follow IS_DISCHARGE_ALLOWED_DURING_CONVERSION, and maybe make it run-time dynamic
+    #ifdef WGC_DEBUG_ACQ_VS_LOOP
+        Serial.print(conversionExpectedDuration_us);
+    #endif
 
     // Write M873_SCANCTRL to all devices to start a scan
     MAX1784Xcomms_writeAll843Reg(
       M873_SCANCTRL,
       TOTAL_IC,
-      BFN_MERG(M873_SCANCTRL_bfOVSAMPL, M873_SCANCTRL_INIT, overSampleBf) | BITVALUE(M873_SCANCTRL_SCAN),
+         (autoBalSwDis ? BITVALUE(M873_SCANCTRL_AUTOBALSWDIS) : 0)
+       | BFN_MERG(M873_SCANCTRL_bfOVSAMPL, M873_SCANCTRL_INIT, overSampleBf)
+       | BITVALUE(M873_SCANCTRL_SCAN),
       MCONT_FEW_PRTX);
     conversionStart_us = micros();
 
@@ -340,7 +357,19 @@ void processAllCellVoltages(void)
 
 bool checkIfAdcWaitOver(void)
 {
-    if ((LTC6804_MAX_CONVERSION_TIME_ms * 1000) < (micros() - conversionStart_us)) { return true;  }
+    if ((LTC6804_MAX_CONVERSION_TIME_ms * 1000) < (micros() - conversionStart_us)) {
+      #ifdef BMS_TYPE_WGCLiBCM
+        if (autoBalSwDis) {
+            //then we need to turn it back off so that cell balancing can continue
+            MAX1784Xcomms_writeAll843Reg(
+              M873_SCANCTRL,
+              TOTAL_IC,
+              M873_SCANCTRL_INIT,
+              MCONT_FEW_PRTX);
+        }
+      #endif
+         return true;
+    }
     else                                                                           { return false; }
 }
 
