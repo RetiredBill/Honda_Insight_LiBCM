@@ -167,6 +167,9 @@ void LTC68042configure_setBalanceResistors(uint8_t icAddress, uint16_t cellBitma
 
     LTC68042configure_writeConfigRegisters(icAddress);
   #else
+    //This can be first comms with MAX1784X after waking from sleep...
+    if (LTC68042configure_wakeup() == LTC6804_CORE_JUST_WOKE_UP) LTC68042configure_programVolatileDefaults();
+
     //WGCToDo: softwareTimeout is LTC6804_DISCHARGE_TIMEOUT_02_SECONDS, which is 0! (as of 2/9/25)
     int dev = mapIc2Dev[icAddress];
     // Set up watchdog timer for 2 sec
