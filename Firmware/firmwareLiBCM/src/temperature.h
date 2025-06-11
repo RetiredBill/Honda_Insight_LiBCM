@@ -93,7 +93,12 @@
     #define TEMP_POWERUP_DELAY_ms 100
 
     #define TEMP_UPDATE_PERIOD_KEYON_ms        (1 *  1000) //  1k per second
-    #define TEMP_UPDATE_PERIOD_KEYOFF_ms       (1 * 60000) // 60k per minute
+    #ifdef WGC_DEBUG_SPEEDUP_MODE_CHANGES
+      // transition far more quickly for test purposes
+      #define TEMP_UPDATE_PERIOD_KEYOFF_ms       (20000) // 20 sec instead of 60
+    #else
+      #define TEMP_UPDATE_PERIOD_KEYOFF_ms       (1 * 60000) // 60k per minute
+    #endif
     #define TEMP_UPDATE_PERIOD_GRIDCHARGING_ms (2 *  1000) //  1k per second
 
 #endif

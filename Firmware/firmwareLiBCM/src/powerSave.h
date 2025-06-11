@@ -3,8 +3,13 @@
 
 #ifndef powerSave_h
     #define powerSave_h
-    
-    #define PERIOD_TO_DISABLE_SLEEP_AFTER_USB_DATA_RECEIVED_ms ((uint32_t)60000)
+
+    #ifdef WGC_DEBUG_SPEEDUP_MODE_CHANGES
+      // transition far more quickly for test purposes
+      #define PERIOD_TO_DISABLE_SLEEP_AFTER_USB_DATA_RECEIVED_ms ((uint32_t)10000) // 10 sec instead of 60
+    #else
+      #define PERIOD_TO_DISABLE_SLEEP_AFTER_USB_DATA_RECEIVED_ms ((uint32_t)60000)
+    #endif
 
     #define PERIOD_TO_DISABLE_TURNOFF_AFTER_CHARGER_UNPLUGGED_hours 4 //prevent turnoff during brief AC power outage
     #define PERIOD_TO_DISABLE_TURNOFF_AFTER_CHARGER_UNPLUGGED_ms (((uint32_t)1000 * 60 * 60) * PERIOD_TO_DISABLE_TURNOFF_AFTER_CHARGER_UNPLUGGED_hours)
@@ -17,7 +22,7 @@
     void powerSave_init(void);
 
     void powerSave_turnOffIfAllowed(void);
-    
+
     void powerSave_sleepIfAllowed(void);
 
     void powerSave_turnOffLiBCM_ifPackEmpty(void);

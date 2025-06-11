@@ -46,7 +46,12 @@
     #define MILLIS_MAXIMUM_VALUE 0xFFFFFFFF //2^32-1
 
     #define KEY_OFF_UPDATE_PERIOD_ONE_SECOND_ms  ((uint32_t)1  *  1000)
-    #define KEY_OFF_UPDATE_PERIOD_TEN_MINUTES_ms ((uint32_t)10 * 60000)
+    #ifdef WGC_DEBUG_SPEEDUP_MODE_CHANGES
+      // transition far more quickly for test purposes
+      #define KEY_OFF_UPDATE_PERIOD_TEN_MINUTES_ms ((uint32_t)15000) // 15 sec instead of 10 min
+    #else
+      #define KEY_OFF_UPDATE_PERIOD_TEN_MINUTES_ms ((uint32_t)10 * 60000)
+    #endif
     //JTS2doLater: When the key is on - but the IMA switch is off (or fuse blown) - reduce LTC6804 update period to minimize LTC6804 power consumption
     //Tests to determine whether the IMA switch is on or off:
         //1) compare the VPIN input signal (HVDC voltage inside the PDU) with the pack voltage (as determined by the LTC6804 ICs).
