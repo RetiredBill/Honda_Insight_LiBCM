@@ -83,7 +83,7 @@
 
   #if   defined(THERM_CONFIG_5AhG3)
     #define NUM_BATTERY_TEMP_SENSORS 3
-  #elif defined(THERM_CONFIG_LiBCM_FoMoCo)
+  #elif defined(THERM_CONFIG_LiBCM_FoMoCo) || (defined(THERM_CONFIG_WGCLiBCM) && defined(WGC_BB3HW))
     // what were 2 OEM temp sensors (PIN_TEMP_GRN, PIN_TEMP_YEL) are now on battery modules
     #define NUM_BATTERY_TEMP_SENSORS 5
   #elif defined(THERM_CONFIG_WGCLiBCM)
