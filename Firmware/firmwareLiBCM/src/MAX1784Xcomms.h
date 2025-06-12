@@ -105,5 +105,8 @@
   bool MAX1784Xcomms_writeAll843Reg(int regAddr, int Device_count, int regValue, int messageControl);
   bool MAX1784Xcomms_writeDev843Reg(int regAddr, int devNum, int regValue, int messageControl);
   bool MAX1784Xcomms_checkActualVsExpected(uint32_t actual, uint32_t expected, char * testName, char * functionName);
+  bool LTC68042comms_fullErrorChecking_get(void);
+  void LTC68042comms_fullErrorChecking_set(bool doFullErrorChecks);
+  void MAX1784Xcomms_diagnoseErrors(char * functionName);
 
 #endif

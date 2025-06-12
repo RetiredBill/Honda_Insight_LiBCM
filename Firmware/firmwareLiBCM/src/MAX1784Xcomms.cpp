@@ -20,9 +20,13 @@ uint8_t m873ExpectedDataCheck = 0;// expected value of received data-check byte
 uint8_t MAX1784Xcomms_getExpectedDataCheck(void)               { return m873ExpectedDataCheck; }
 void    MAX1784Xcomms_setExpectedDataCheck(uint8_t expectedDC) { m873ExpectedDataCheck = expectedDC; }
 
+bool m873doFullErrorChecks = true; // do full error checking state
+bool LTC68042comms_fullErrorChecking_get(void)                   { return m873doFullErrorChecks; }
+void LTC68042comms_fullErrorChecking_set(bool doFullErrorChecks) { m873doFullErrorChecks = doFullErrorChecks; }
+
 /////////////////////////////////////////////////////////////////////////////////////////
 
-// Check provided (actual) versus expected value. If not qual, print error message.
+// Check provided (actual) versus expected value. If not equal, print error message.
 //  return comparisson result 1 or 0
 bool MAX1784Xcomms_checkActualVsExpected(
   uint32_t actual,

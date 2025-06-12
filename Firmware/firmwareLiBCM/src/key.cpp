@@ -26,6 +26,8 @@ void key_handleKeyEvent_off(void)
   #ifdef BMS_TYPE_WGCLiBCM
     //acqusition parameter tweaks /could/ be applied to BMS_TYPE_LiBCM for lower noise, but is not coded, and may not be beneficial
     LTC68042configure_acqusitionPrecision_set(ACQ_MOST_PRECISE_BUT_SLOWER);
+    //we can spend the time for full error checking
+    LTC68042comms_fullErrorChecking_set(true);
   #endif
     LTC68042cell_acquireAllCellVoltages();
     SoC_updateUsingLatestOpenCircuitVoltage(); //JTS2doLater: Add ten minute delay before VoC->SoC LUT
@@ -68,6 +70,8 @@ void key_handleKeyEvent_on(void)
     gpio_turnPowerSensors_on();
   #ifdef BMS_TYPE_WGCLiBCM
     LTC68042configure_acqusitionPrecision_set(ACQ_REASONABLY_PRECISE_AND_FASTER);
+    //we need to run as fast as possible
+    LTC68042comms_fullErrorChecking_set(false);
   #endif
     LTC68042configure_programVolatileDefaults(); //turn discharge resistors off, set ADC LPF, etc.
     LTC68042configure_handleKeyStateChange();
