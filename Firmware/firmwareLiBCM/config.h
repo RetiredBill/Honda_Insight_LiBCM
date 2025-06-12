@@ -140,7 +140,7 @@
     #define WGC_BB3HW // running on stock LiBCM, with wgcMAX17Uart tacked on the back
     //WGCToDo: All WGC_BB1HW references in the code must be removed before BB2
     //#define WGC_DEBUG_ACQ_VS_LOOP // enables useful serial console markers for debugging timeing/sequence of acquisition versus loop events and end
-    #define WGC_DEBUG_SPEEDUP_MODE_CHANGES // enables quicker transitions to sleep mode, etc.
+    //#define WGC_DEBUG_SPEEDUP_MODE_CHANGES // enables quicker transitions to sleep mode, etc.
     //#define RUN_BRINGUP_TESTER_MOTHERBOARD //requires external test PCB (that you don't have)
     //#define RUN_BRINGUP_TESTER_GRIDCHARGER //requires external test equipment
 

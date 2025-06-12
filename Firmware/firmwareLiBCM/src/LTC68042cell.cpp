@@ -218,7 +218,9 @@ void validateAndStoreNextMAX17843(uint8_t chipAddress)
     do //repeats until PECs match (i.e. no data transmission errors)
     {
         readOk &= MAX1784Xcomms_readBlock843(M873_CELL1, (1 + M873_TOTAL - M873_CELL1), chipAddress, rawReadings, messageControl);
+        if (! readOk) MAX1784Xcomms_diagnoseErrors(__func__);
         readOk &= MAX1784Xcomms_readDev843Reg(M873_DIAG, chipAddress, &rawDieTemp, messageControl);
+        if (! readOk) MAX1784Xcomms_diagnoseErrors(__func__);
         if (attemptCounter++ > 1) { LTC68042result_errorCount_increment(); } //log each error
     } while ((!readOk) && (attemptCounter < MAX_READ_ATTEMPTS)); //retry if error
 

@@ -17,6 +17,16 @@
   #define M873_READALL                   0x03
   #define M873_READBLOCK                 0x06
 
+  // Data Check byte
+  #define M873_DATACHECK_ALRTPEC            7
+  #define M873_DATACHECK_ALRTFMEA           6
+  #define M873_DATACHECK_ALRTSTATUS         5
+  //#define M873_DATACHECK_Reserved           4
+  //#define M873_DATACHECK_Reserved           3
+  #define M873_DATACHECK_ALRTOV             2
+  #define M873_DATACHECK_ALRTUV             1
+  //#define M873_DATACHECK_Reserved           0
+
   //========================================================================
   //========================================================================
   //  MAX17843 registers

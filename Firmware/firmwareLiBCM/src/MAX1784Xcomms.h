@@ -10,6 +10,8 @@
   #define DATA_CHECK_SEED_0      0x00   // Data check seed value
   #define DATA_CHECK_EXPECTED_POR 0x20   // Data check expected result after POR
   #define DATA_CHECK_EXPECTED_NORMAL 0x00   // Data check expected result otherwise
+  #define LAST_DEVICENUM_INVALID   0xff
+  #define LAST_DEVICENUM_ALL       0x1f
 
   // Message handling function and check control bit positions
   #define MCONT_RX_INT_FLAGS       10

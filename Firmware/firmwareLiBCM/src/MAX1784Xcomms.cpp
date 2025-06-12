@@ -24,6 +24,11 @@ bool m873doFullErrorChecks = true; // do full error checking state
 bool LTC68042comms_fullErrorChecking_get(void)                   { return m873doFullErrorChecks; }
 void LTC68042comms_fullErrorChecking_set(bool doFullErrorChecks) { m873doFullErrorChecks = doFullErrorChecks; }
 
+// used for deferred error checking
+uint8_t lastDataCheckByte = DATA_CHECK_EXPECTED_POR;
+int     lastNumDevices = LAST_DEVICENUM_ALL;
+int     lastDeviceNum = LAST_DEVICENUM_INVALID;
+
 /////////////////////////////////////////////////////////////////////////////////////////
 
 // Check provided (actual) versus expected value. If not equal, print error message.
@@ -573,6 +578,73 @@ digitalWrite(PIN_LASIG, HIGH);
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
+// Check provided data-check value.
+//  return comparisson result 1 or 0
+bool MAX1784Xcomms_checkDataCheck(
+  uint8_t actualDataCheckByte,
+  int numDevices,
+  int devNum,
+  char * functionName)
+{
+  //save what was last seen for deferred diagnosis
+  lastDataCheckByte = actualDataCheckByte;
+  lastNumDevices = numDevices;
+  lastDeviceNum = devNum;
+
+  if (actualDataCheckByte != m873ExpectedDataCheck) {
+    // then it is not what we expect
+    Serial.print(F("  ERROR: data-check failure in "));
+    Serial.print(functionName);
+    if (LAST_DEVICENUM_ALL == devNum) {
+        // then data-check error is one or more devices
+        Serial.print(F(" on one or more devices"));
+    }
+    else {
+        // data-check error occurred on devNum
+        Serial.print(F(" on device "));
+        Serial.print(devNum);
+    }
+    Serial.print(F("! Expected 0x"));
+    Serial.print(m873ExpectedDataCheck, HEX);
+    Serial.print(F(", got 0x"));
+    Serial.print(actualDataCheckByte, HEX);
+    uint8_t failedBits = actualDataCheckByte ^ m873ExpectedDataCheck;
+    // parse out data-check failed bits
+    //WGCToDo: Note that if this is from a readAll, the data-check bits are logical or of all devices
+    if (failedBits & BITVALUE(M873_DATACHECK_ALRTPEC)) {
+        // also available in individual device STATUS register
+        Serial.print(F(" ALRTPEC: Expected "));
+        Serial.print((actualDataCheckByte & BITVALUE(M873_DATACHECK_ALRTPEC)) ? F(" 0 got 1") : F(" 1 got 0"));
+    }
+    if (failedBits & BITVALUE(M873_DATACHECK_ALRTFMEA)) {
+        // also available (with more info) from individual device STATUS register
+        Serial.print(F(" ALRTFMEA: Expected "));
+        Serial.print((actualDataCheckByte & BITVALUE(M873_DATACHECK_ALRTFMEA)) ? F(" 0 got 1") : F(" 1 got 0"));
+    }
+    if (failedBits & BITVALUE(M873_DATACHECK_ALRTSTATUS)) {
+        // need to access individual device STATUS register to find cause
+        Serial.print(F(" ALRTSTATUS: Expected "));
+        Serial.print((actualDataCheckByte & BITVALUE(M873_DATACHECK_ALRTSTATUS)) ? F(" 0 got 1") : F(" 1 got 0"));
+        //WGCToDo: Pick up STATUS register to determine issue
+    }
+    if (failedBits & BITVALUE(M873_DATACHECK_ALRTOV)) {
+        // also available in individual device STATUS register
+        Serial.print(F(" ALRTOV: Expected "));
+        Serial.print((actualDataCheckByte & BITVALUE(M873_DATACHECK_ALRTOV)) ? F(" 0 got 1") : F(" 1 got 0"));
+    }
+    if (failedBits & BITVALUE(M873_DATACHECK_ALRTUV)) {
+        // also available in individual device STATUS register
+        Serial.print(F(" ALRTUV: Expected "));
+        Serial.print((actualDataCheckByte & BITVALUE(M873_DATACHECK_ALRTUV)) ? F(" 0 got 1") : F(" 1 got 0"));
+    }
+    Serial.println();
+    return 0;
+  }
+  return 1;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+
 // Do alive-cound byte checking and seed increment
   // alive-count is garbage until ALIVECNTEN in DEVCFG1 is set.
   // Checking is therefor gated by m873AliveCountSeed: 0 => don't check alive-count yet, else do
@@ -664,7 +736,7 @@ bool MAX1784Xcomms_readAll843Reg(int regAddr, int Device_count, uint16_t * resul
 
   // Check the calculated and hardware returned PEC (should be valid for any received message)
   messageValid &= MAX1784Xcomms_checkActualVsExpected(rxPEC, LTC68042configure_calcPEC15(msgLength - 2, rxBuff), "PEC", __func__);
-  messageValid &= MAX1784Xcomms_checkActualVsExpected(rxDataCheck, m873ExpectedDataCheck, "data-check", __func__);
+  messageValid &= MAX1784Xcomms_checkDataCheck(rxDataCheck, Device_count, LAST_DEVICENUM_ALL, __func__);
   messageValid &= MAX1784Xcomms_checkAliveCount(rxAliveCount, Device_count, __func__);
 
   // pick up data payload read back from transfer buffer
@@ -713,7 +785,7 @@ bool MAX1784Xcomms_readDev843Reg(int regAddr, int devNum, uint16_t * resultBuff,
 
   // Check the calculated and hardware returned PEC (should be valid for any received message)
   messageValid &= MAX1784Xcomms_checkActualVsExpected(rxPEC, LTC68042configure_calcPEC15(5, rxBuff), "PEC", __func__);
-  messageValid &= MAX1784Xcomms_checkActualVsExpected(rxDataCheck, m873ExpectedDataCheck, "data-check", __func__);
+  messageValid &= MAX1784Xcomms_checkDataCheck(rxDataCheck, 1, devNum, __func__);
   messageValid &= MAX1784Xcomms_checkAliveCount(rxAliveCount, 1, __func__);
 
   // pick up data payload read back from transfer buffer
@@ -766,7 +838,7 @@ bool MAX1784Xcomms_readBlock843(int startRegAddr, int blockSize, int devNum, uin
 
   // Check the calculated and hardware returned PEC (should be valid for any received message)
   messageValid &= MAX1784Xcomms_checkActualVsExpected(rxPEC, LTC68042configure_calcPEC15(msgLength - 2, rxBuff), "PEC", __func__);
-  messageValid &= MAX1784Xcomms_checkActualVsExpected(rxDataCheck, m873ExpectedDataCheck, "data-check", __func__);
+  messageValid &= MAX1784Xcomms_checkDataCheck(rxDataCheck, 1, devNum, __func__);
   messageValid &= MAX1784Xcomms_checkAliveCount(rxAliveCount, 1, __func__);
 
   // pick up data payload read back from transfer buffer
@@ -868,6 +940,64 @@ bool MAX1784Xcomms_writeDev843Reg(int regAddr, int devNum, int regValue, int mes
   }
 
   return messageValid;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+// Dump out and then clear device status registers
+void MAX1784Xcomms_dumpAndClearStatus(int devNum)
+{
+    uint16_t regValue;
+
+    // Read STATUS, and verify all just have M873_STATUS_ALRTRST set, with data-check of DATA_CHECK_EXPECTED_POR
+    Serial.print(F("  For device "));
+    Serial.print(devNum);
+
+    // status register
+    Serial.print(F(", STATUS reg: "));
+    MAX1784Xcomms_readDev843Reg(M873_STATUS, devNum, &regValue, MCONT_FULL_CHECKS);
+    Serial.print(regValue, HEX);
+    if (M873_CLEAR_ALL != regValue) {
+        MAX1784Xcomms_writeDev843Reg(M873_STATUS, devNum, M873_STATUS_INIT, MCONT_FULL_CHECKS);
+        MAX1784Xcomms_setExpectedDataCheck(DATA_CHECK_EXPECTED_NORMAL);
+    }
+
+    // FMEA1 register
+    Serial.print(F(", FMEA1 reg: "));
+    MAX1784Xcomms_readDev843Reg(M873_FMEA1, devNum, &regValue, MCONT_FULL_CHECKS);
+    Serial.print(regValue, HEX);
+    if (M873_CLEAR_ALL != regValue) {
+        MAX1784Xcomms_writeDev843Reg(M873_FMEA1, devNum, M873_CLEAR_ALL, MCONT_FULL_CHECKS);
+    }
+
+    // FMEA2 register
+    Serial.print(F(", FMEA2 reg: "));
+    MAX1784Xcomms_readDev843Reg(M873_FMEA2, devNum, &regValue, MCONT_FULL_CHECKS);
+    Serial.print(regValue, HEX);
+    if (M873_CLEAR_ALL != regValue) {
+        MAX1784Xcomms_writeDev843Reg(M873_FMEA2, devNum, M873_CLEAR_ALL, MCONT_FULL_CHECKS);
+    }
+
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+// Look at last error, and diagnose cause
+void MAX1784Xcomms_diagnoseErrors(char * functionName)
+{
+    //at the moment, this only applies to data-check errors
+    if (lastDataCheckByte != m873ExpectedDataCheck) {
+        // OK, we can now expect data-check will be lastDataCheckByte, until STATUS is cleared
+        m873ExpectedDataCheck = lastDataCheckByte;
+        if (LAST_DEVICENUM_ALL == lastDeviceNum) {
+            // then data-check error is one or more devices
+            for (int DAx = 0; DAx < lastNumDevices; DAx++) {
+                MAX1784Xcomms_dumpAndClearStatus(DAx);
+            }
+        }
+        else {
+            // data-check error occurred on lastDeviceNum
+            MAX1784Xcomms_dumpAndClearStatus(lastDeviceNum);
+        }
+    }
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
