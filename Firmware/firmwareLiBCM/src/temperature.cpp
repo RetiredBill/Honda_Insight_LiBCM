@@ -186,7 +186,7 @@ void temperature_measureAndPrintLatestModuleThermCounts(void)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-void temperature_measureAndPrintAll(void)
+uint16_t temperature_measureAndPrintAll(void)
 {
     if (gpio_getPinState(PIN_TEMP_EN) == PIN_OUTPUT_HIGH)
     {
@@ -228,11 +228,13 @@ void temperature_measureAndPrintAll(void)
         //WGCToDo: CRITICAL Add SDI module temp sensing
         #endif
       #endif
+        return(0);
     }
     else
     {
         gpio_turnTemperatureSensors_on();
         Serial.print(F("\nturned sensors on. Repeat command to display temp."));
+        return(TEMP_POWERUP_DELAY_ms);
     }
 }
 

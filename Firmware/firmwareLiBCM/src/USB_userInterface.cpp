@@ -112,7 +112,14 @@ void USB_userInterface_runTestCode(uint8_t testToRun)
     }
 
     //Lettered tests ($TESTA/B/C) are permanent, for user testing during product troubleshooting
-    else if (testToRun == 'T') { temperature_measureAndPrintAll(); }
+    else if (testToRun == 'T') {
+        uint16_t delayForTurnOn_ms = temperature_measureAndPrintAll();
+        if (0 !=  delayForTurnOn_ms) {
+            //then thermistors were not powered on, need to delay and try again
+            delay(delayForTurnOn_ms);
+            temperature_measureAndPrintAll();
+        }
+    }
     else if (testToRun == 'R') { LTC6804gpio_areAllVoltageReferencesPassing(); }
     else if (testToRun == 'W') { batteryHistory_printAll(); }
     else if (testToRun == 'E') { eeprom_resetAll_userConfirm(); }
