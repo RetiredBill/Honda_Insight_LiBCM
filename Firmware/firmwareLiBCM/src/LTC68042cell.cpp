@@ -205,6 +205,7 @@ void validateAndStoreNextMAX17843(uint8_t chipAddress)
     const uint8_t MAX_READ_ATTEMPTS = 3; //max attempts to read back CVR without PEC error
 
     int messageControl = LTC68042comms_fullErrorChecking_get() ? MCONT_FULL_CHECKS : MCONT_RX_MINIMUM_CHECKS;
+    int dev = mapIc2Dev[chipAddress];
     uint8_t attemptCounter = 0;
     bool readOk = true;
     uint16_t rawReadings[(1 + M873_TOTAL - M873_CELL1)];
@@ -217,9 +218,9 @@ void validateAndStoreNextMAX17843(uint8_t chipAddress)
 
     do //repeats until PECs match (i.e. no data transmission errors)
     {
-        readOk &= MAX1784Xcomms_readBlock843(M873_CELL1, (1 + M873_TOTAL - M873_CELL1), chipAddress, rawReadings, messageControl);
+        readOk &= MAX1784Xcomms_readBlock843(M873_CELL1, (1 + M873_TOTAL - M873_CELL1), dev, rawReadings, messageControl);
         if (! readOk) MAX1784Xcomms_diagnoseErrors(__func__);
-        readOk &= MAX1784Xcomms_readDev843Reg(M873_DIAG, chipAddress, &rawDieTemp, messageControl);
+        readOk &= MAX1784Xcomms_readDev843Reg(M873_DIAG, dev, &rawDieTemp, messageControl);
         if (! readOk) MAX1784Xcomms_diagnoseErrors(__func__);
         if (attemptCounter++ > 1) { LTC68042result_errorCount_increment(); } //log each error
     } while ((!readOk) && (attemptCounter < MAX_READ_ATTEMPTS)); //retry if error
