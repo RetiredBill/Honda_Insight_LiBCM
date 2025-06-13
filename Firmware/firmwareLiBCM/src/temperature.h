@@ -54,7 +54,8 @@
     uint16_t temperature_ModuleDie_getLatest_counts(uint8_t icAddress);
     void     temperature_ModuleDie_setLatest_counts(uint8_t icAddress, uint16_t temp_counts);
     uint16_t temperature_ModuleTherm_getLatest_counts(uint8_t icAddress, uint8_t thermistor);
-    void     temperature_ModuleTherm_setLatest_counts(uint8_t icAddress, uint8_t thermistor, uint8_t temp_counts);
+    void     temperature_ModuleTherm_setLatest_counts(uint8_t icAddress, uint8_t thermistor, uint16_t temp_counts);
+    void     temperature_ModuleTherm_setSampleTime_ms(uint32_t sampleTime_ms);
   #endif
 
     int8_t temperature_measureOneSensor_degC(uint8_t thermistorPin);

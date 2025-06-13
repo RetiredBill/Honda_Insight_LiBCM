@@ -19,6 +19,7 @@ int8_t tempAmbient = ROOM_TEMP_DEGC;
 #if defined(THERM_CONFIG_WGCLiBCM)
 uint16_t tempModuleDie_counts[TOTAL_IC];
 uint16_t tempModuleTherm_counts[TOTAL_IC][2];
+uint32_t tempModuleTherm_sampleTime_ms = 0;
 #endif
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -34,8 +35,9 @@ int8_t temperature_ambient_getLatest(void)    { return tempAmbient; } //WHT OEM 
 #if defined(THERM_CONFIG_WGCLiBCM)
 uint16_t temperature_ModuleDie_getLatest_counts(uint8_t icAddress)                       { return tempModuleDie_counts[icAddress];               }
 void     temperature_ModuleDie_setLatest_counts(uint8_t icAddress, uint16_t temp_counts) {        tempModuleDie_counts[icAddress] = temp_counts; }
-uint16_t temperature_ModuleTherm_getLatest_counts(uint8_t icAddress, uint8_t thermistor)                      { return tempModuleTherm_counts[icAddress][thermistor];               }
-void     temperature_ModuleTherm_setLatest_counts(uint8_t icAddress, uint8_t thermistor, uint8_t temp_counts) {        tempModuleTherm_counts[icAddress][thermistor] = temp_counts; }
+uint16_t temperature_ModuleTherm_getLatest_counts(uint8_t icAddress, uint8_t thermistor)                       { return tempModuleTherm_counts[icAddress][thermistor];               }
+void     temperature_ModuleTherm_setLatest_counts(uint8_t icAddress, uint8_t thermistor, uint16_t temp_counts) {        tempModuleTherm_counts[icAddress][thermistor] = temp_counts; }
+void     temperature_ModuleTherm_setSampleTime_ms(uint32_t sampleTime_ms) {tempModuleTherm_sampleTime_ms = sampleTime_ms;}
 #endif
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -165,6 +167,24 @@ void temperature_printAll_latest(void)
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
+//WGCToDo: This is just temporary
+void temperature_measureAndPrintLatestModuleThermCounts(void)
+{
+    if (20 < (millis() - tempModuleTherm_sampleTime_ms)) LTC68042cell_acquireAllCellVoltages(); //WGCToDo: this will pick up module thermistors
+    for (int ICx = 0; ICx < TOTAL_IC; ICx++) {
+        Serial.print(F("\nModule "));
+        Serial.print(ICx + 1);
+        Serial.print(F(" thermistor 1: "));
+        Serial.print(tempModuleTherm_counts[ICx][0], HEX);
+        Serial.print(F(", 2: "));
+        Serial.print(tempModuleTherm_counts[ICx][1], HEX);
+    }
+    Serial.print(F("\n  (sample age "));
+    Serial.print(millis() - tempModuleTherm_sampleTime_ms);
+    Serial.println(F(")"));
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
 
 void temperature_measureAndPrintAll(void)
 {
@@ -201,6 +221,7 @@ void temperature_measureAndPrintAll(void)
         Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_BAY2));
         Serial.print(F("\nMiddle tray rail, passenger side: ")); //BAY3
         Serial.print(temperature_measureOneSensor_degC(PIN_TEMP_BAY3));
+        temperature_measureAndPrintLatestModuleThermCounts();
       #else
         #ifndef WGC_BB1HW
         #error (Samsung SDI Battery module temp sensing not implimented yet)
@@ -285,6 +306,7 @@ void temperature_handler(void)
     uint8_t keyState_Now = key_getSampledState(); //prevent mid-loop key state change
 
     keyState_Now = turnSensorsOff_whenKeyStateChanges(keyState_Now); //JTS2doNow: function returns value meant for tempSensorState //writing to wrong variable?
+    //WGCToDo: returns TEMPSENSORSTATE_TURNOFF (aka 32) if keyState_Now changed, else keyState_Now. KEYSTATE_ON is 1
 
     static uint32_t latestTempMeasurement_ms = 0;
     static uint32_t latestSensorTurnon_ms = 0;
@@ -319,6 +341,7 @@ void temperature_handler(void)
         //sensors only turn off when key is off and grid charger is unplugged
         Serial.print(F("\nTemp(C): ")); //print temp when key is off
         Serial.print(String(tempBattery));
+        temperature_measureAndPrintLatestModuleThermCounts(); //WGCToDo: temporary
         gpio_turnTemperatureSensors_off();
         tempSensorState = TEMPSENSORSTATE_OFF;
     }

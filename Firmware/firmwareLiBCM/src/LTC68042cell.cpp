@@ -239,6 +239,7 @@ void validateAndStoreNextMAX17843(uint8_t chipAddress)
         }
         temperature_ModuleTherm_setLatest_counts(chipAddress, 0, rawReadings[13]);
         temperature_ModuleTherm_setLatest_counts(chipAddress, 1, rawReadings[14]);
+        temperature_ModuleTherm_setSampleTime_ms(millis());
         temperature_ModuleDie_setLatest_counts(chipAddress, rawDieTemp);
     }
 }
