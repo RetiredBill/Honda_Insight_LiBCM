@@ -54,6 +54,10 @@
     #endif
   #endif
 
+    #define BMS_TYPE_WGCLiBCM_SPI_CLOCK_DIV SPI_CLOCK_DIV8
+    // SPI_CLOCK_DIV8 works, but (as of 2025-06-14) only has 1ms headroom for loop timing
+    // SPI_CLOCK_DIV4 also works, but still only has 1ms headroom for loop timing
+
     //Acquisition time vs measurement accuracy trade-off
     // ACQ_REASONABLY_PRECISE_AND_FASTER for time sensitive operation (key-on)
     // ACQ_MOST_PRECISE_BUT_SLOWER for when time is less important, but better accuracy is helpful (key-off)

@@ -13,6 +13,9 @@
   #define LAST_DEVICENUM_INVALID   0xff
   #define LAST_DEVICENUM_ALL       0x1f
 
+  #define M871_READREG_RX_STATUS_TIMEOUT_us 9600 //Empirical data shows 4.3mS for 5 devices
+  #define M871_READREG_TX_STATUS_TIMEOUT_us 600  //Empirical data shows up to 200uS
+
   // Message handling function and check control bit positions
   #define MCONT_RX_INT_FLAGS       10
   #define MCONT_RX_LAST_BYTE        9

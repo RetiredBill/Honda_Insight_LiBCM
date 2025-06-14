@@ -186,7 +186,8 @@ void MAX1784Xcomms_max17841_shutdown(void)
 //   Leave the MAX17843 chips in active mode, ready for messages
 void MAX1784Xcomms_wakeup(void)
 {
-  int repCount;
+  uint32_t timestamp_latestEvent_us;
+  uint32_t latestEventDelay_us;
   uint8_t cmd[2];
   uint8_t rxBuff[2];
 
@@ -194,6 +195,8 @@ void MAX1784Xcomms_wakeup(void)
   cmd[0] = M871_WRITEREG_CONFIGURATION_2;
   cmd[1] = M871_CONF_2_TX_PREAMBLE_MODE;
   LTC68042configure_spiWrite(2, cmd);
+  timestamp_latestEvent_us = micros();
+  latestEventDelay_us = 0;
   // MAX17843.pdf pg 97: expect need to send preambles for 2ms per device...
   //   Empirical data gives ~4.4ms for 5 devices
 
@@ -202,42 +205,52 @@ void MAX1784Xcomms_wakeup(void)
   //     RX_Busy_Status 1 => ASCI chip UART is busy receiving data (preambles)
   //     RX_Empty_Status 1 => ASCI chip rx buffer has no data yet (preambles, no stop yet)
   cmd[0] = M871_READREG_RX_STATUS;
-  for (repCount = 150; repCount > 0; repCount--) {
+  while (M871_READREG_RX_STATUS_TIMEOUT_us > latestEventDelay_us) {
     LTC68042configure_spiWriteRead(cmd, 1, rxBuff, 1);
     if ((BITVALUE(M871_RX_STATUS_RX_Busy_Status) | BITVALUE(M871_RX_STATUS_RX_Empty_Status)) == rxBuff[0]) break;
+    latestEventDelay_us = micros() - timestamp_latestEvent_us;
   }
-  if (0 == repCount) {
+  if (M871_READREG_RX_STATUS_TIMEOUT_us <= latestEventDelay_us) {
     Serial.print(F("  ERROR: timed out waiting for 0x21 == RX_STATUS. Last status was : 0x"));// WGCToDo: Change text to not use fixed 0x value?
     Serial.println(rxBuff[0], HEX);
   }
-//  else { //WGCToDo: debug print?
-//    Serial.print(F(" Tries for 0x21 == RX_STATUS: "));// WGCToDo: Change text to not use fixed 0x value?
-//    Serial.println(150 - repCount);
-//  }
+  #ifdef WGC_DEBUG_COMMS
+  else {
+    Serial.print(F(" Delay for 0x21 == RX_STATUS: "));// WGCToDo: Change text to not use fixed 0x value?
+    Serial.print(latestEventDelay_us);
+    Serial.println(F(" uSec"));
+  }
+  #endif
 
   // Set WRITE_CONFIGURATION_2 to Disable transmit preambles mode, and
   //   enter TX queue mode, ready to send messages
   cmd[0] = M871_WRITEREG_CONFIGURATION_2;
   cmd[1] = M871_CONF_2_TX_QUEUE_MODE;
   LTC68042configure_spiWrite(2, cmd);
+  timestamp_latestEvent_us = micros();
+  latestEventDelay_us = 0;
 
   // Read RX_Status regiter and wait for RX_Status RX_Empty_Status bit == 0
   //   This indicates that all preambles have made it back down the daisy chain
   // MAX17841.pdf pg 17: Need to wait "untill all transmitted preambles have been received before
   //   clearing the buffer"
   cmd[0] = M871_READREG_RX_STATUS;
-  for (repCount = 150; repCount > 0; repCount--) {
+  while (M871_READREG_RX_STATUS_TIMEOUT_us > latestEventDelay_us) {
     LTC68042configure_spiWriteRead(cmd, 1, rxBuff, 1);
     if (! (BITVALUE(M871_RX_STATUS_RX_Empty_Status) & rxBuff[0])) break;
+    latestEventDelay_us = micros() - timestamp_latestEvent_us;
   }
-  if (0 == repCount) {
+  if (M871_READREG_RX_STATUS_TIMEOUT_us <= latestEventDelay_us) {
     Serial.print(F("  ERROR: timed out waiting for RX_STATUS.RX_Empty_Status cleared. Last status was : 0x"));
     Serial.println(rxBuff[0], HEX);
   }
-//  else { //WGCToDo: debug print?
-//    Serial.print(F(" Tries for RX_STATUS.RX_Empty_Status cleared: "));
-//    Serial.println(150 - repCount);
-//  }
+  #ifdef WGC_DEBUG_COMMS
+  else {
+    Serial.print(F(" Delay for RX_STATUS.RX_Empty_Status cleared: "));
+    Serial.print(latestEventDelay_us);
+    Serial.println(F(" uSec"));
+  }
+  #endif
 
   // Now set long-term configuration 3 register keep-alive period
   cmd[0] = M871_WRITEREG_CONFIGURATION_3;
@@ -275,7 +288,8 @@ digitalWrite(PIN_LASIG, HIGH);
   bool allOK = 1;
   uint8_t cmd[2];
   uint8_t rxBuff[4];
-  int repCount = 0;
+  uint32_t timestamp_latestEvent_us;
+  uint32_t latestEventDelay_us;
 
   // Transfter outgoing message to ASCI chip load queue
   LTC68042configure_spiWrite(tx_len, tx_Data);
@@ -422,6 +436,8 @@ digitalWrite(PIN_LASIG, HIGH);
   // Launch the message
   cmd[0] = M871_CMD_WR_NXT_LD_Q0;
   LTC68042configure_spiWrite(1, cmd);
+  timestamp_latestEvent_us = micros();
+  latestEventDelay_us = 0;
 digitalWrite(PIN_LASIG, LOW); // #3
 digitalWrite(PIN_LASIG, HIGH);
 
@@ -430,23 +446,26 @@ digitalWrite(PIN_LASIG, HIGH);
     //   TX_STATUS.TX_Busy_Status is not set
     //   TX_STATUS.TX_Idle_Status is set
     cmd[0] = M871_READREG_TX_STATUS;
-    for (repCount = 150; repCount > 0; repCount--) {
+    while (M871_READREG_TX_STATUS_TIMEOUT_us > latestEventDelay_us) {
       LTC68042configure_spiWriteRead(cmd, 1, rxBuff, 1);
       if (    BITVALUE(M871_TX_STATUS_TX_Idle_Status)        // bits expected to be set
            == (  (   BITVALUE(M871_TX_STATUS_TX_Busy_Status) // mask for all bits to check
                    | BITVALUE(M871_TX_STATUS_TX_Idle_Status)
                  ) & rxBuff[0]))
         break;
+      latestEventDelay_us = micros() - timestamp_latestEvent_us;
     }
-    if (0 == repCount) {
+    if (M871_READREG_TX_STATUS_TIMEOUT_us <= latestEventDelay_us) {
       Serial.print(F("  ERROR: timed out waiting for Post TX TX_STATUS. Last status was : 0x"));
       Serial.println(rxBuff[0], HEX);
       allOK = 0;
     }
     else {
-  //    //WGCToDo: make this some kind of debug mode enabled
-  //    Serial.print(" Tries for Post TX TX_STATUS: ");
-  //    Serial.println(150 - repCount);
+      #ifdef WGC_DEBUG_COMMS
+      Serial.print(" Delay for Post TX TX_STATUS: ");
+      Serial.print(latestEventDelay_us);
+      Serial.println(F(" uSec"));
+      #endif
       allOK &= MAX1784Xcomms_checkActualVsExpected(
         ( (   BITVALUE(M871_TX_STATUS_TX_Busy_Status)  // mask for all bits to check
             | BITVALUE(M871_TX_STATUS_TX_Idle_Status)
@@ -475,26 +494,28 @@ digitalWrite(PIN_LASIG, HIGH);
     // Poll RX_Status register until a mesage is received
     //   RX_STATUS.RX_STOP_Status set
     cmd[0] = M871_READREG_RX_STATUS;
-    for (repCount = 150; repCount > 0; repCount--) {
+    while (M871_READREG_RX_STATUS_TIMEOUT_us > latestEventDelay_us) {
       LTC68042configure_spiWriteRead(cmd, 1, rxBuff, 1);
       if (    BITVALUE(M871_RX_STATUS_RX_STOP_Status)     // bits expected to be set
-           == (   BITVALUE(M871_RX_STATUS_RX_STOP_Status) // mask for all bits to check
-                & rxBuff[0]))
+           == ( (   BITVALUE(M871_RX_STATUS_RX_STOP_Status) // mask for all bits to check
+                  | BITVALUE(M871_RX_STATUS_RX_Busy_Status)
+                ) & rxBuff[0]))
         break;
     }
-    if (0 == repCount) {
+    if (M871_READREG_RX_STATUS_TIMEOUT_us <= latestEventDelay_us) {
       Serial.print(F("  ERROR: timed out waiting for Post TX RX_STATUS. Last status was : 0x"));
       Serial.println(rxBuff[0], HEX);
       allOK = 0;
     }
     else {
-  //    //WGCToDo: make this some kind of debug mode enabled
-  //    Serial.print(" Tries for Post TX RX_STATUS: ");
-  //    Serial.println(150 - repCount);
+      #ifdef WGC_DEBUG_COMMS
+      Serial.print(" Delay for Post TX RX_STATUS: ");
+      Serial.print(latestEventDelay_us);
+      Serial.println(F(" uSec"));
+      #endif
       // Check for errors in RX_STATUS
       allOK &= MAX1784Xcomms_checkActualVsExpected(
         ( (   BITVALUE(M871_RX_STATUS_RX_Error_Status) // mask for all bits to check
-            | BITVALUE(M871_RX_STATUS_RX_Busy_Status)
             | BITVALUE(M871_RX_STATUS_RX_Idle_Status)
             | BITVALUE(M871_RX_STATUS_RX_Overflow_Status)
             | BITVALUE(M871_RX_STATUS_RX_Full_Status)

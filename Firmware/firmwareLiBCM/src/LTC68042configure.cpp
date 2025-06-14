@@ -437,9 +437,7 @@ void LTC68042configure_initialize(void)
     #ifdef WGC_BB3HW
       pinMode(PIN_SPI_CS, OUTPUT);
     #endif
-    spi_enable(SPI_CLOCK_DIV64); //WGCToDo: increase clock speed //DIV16 & DIV32 work on bench
-    //spi_enable(SPI_CLOCK_DIV16);//WGCToDo: works, but need some tweaking
-    //spi_enable(SPI_CLOCK_DIV8);//WGCToDo: probably works, but need even more tweaking
+    spi_enable(SPI_CLOCK_DIV64); //default SPI clock, but may be different for MAX17841 xfers
   #endif
 }
 
@@ -1145,6 +1143,7 @@ void LTC68042configure_spiWrite(
 
     lastTimeDataSent_millis = millis();
   #else
+    spi_enable(BMS_TYPE_WGCLiBCM_SPI_CLOCK_DIV);
     digitalWrite(PIN_SPI_CS, LOW);  // assert chip select
     for (uint8_t i = 0; i < len; i++) {
         SPDR = (char)data[i];                  //start the SPI transfer
@@ -1158,6 +1157,7 @@ void LTC68042configure_spiWrite(
         while (!(SPSR & _BV(SPIF)));  //wait for transfer to complete
     }
     digitalWrite(PIN_SPI_CS, HIGH); // de-assert chip select
+    spi_enable(SPI_CLOCK_DIV64);
   #endif
 }
 
@@ -1183,6 +1183,7 @@ void LTC68042configure_spiWriteRead(
 
     lastTimeDataSent_millis = millis();
   #else
+    spi_enable(BMS_TYPE_WGCLiBCM_SPI_CLOCK_DIV);
     digitalWrite(PIN_SPI_CS, LOW); // assert chip select
     for (uint8_t i = 0; i < tx_len; i++) {
         SPDR = (char)tx_Data[i];      // start the SPI transfer
@@ -1196,6 +1197,7 @@ void LTC68042configure_spiWriteRead(
         rx_data[i] = (uint8_t)SPDR;   // return read data
     }
     digitalWrite(PIN_SPI_CS, HIGH); // de-assert chip select
+    spi_enable(SPI_CLOCK_DIV64);
   #endif
 }
 
