@@ -45,6 +45,11 @@ void key_handleKeyEvent_off(void)
     //   Will be run on every key-off event
     //   Ordered by "fundamental-ity" (most fundamental first)
     //   Any test failure is fatal
+  #ifdef BMS_TYPE_WGCLiBCM
+    MAX1784Xcomms_ReadAndCheckM871ModelAndVersion();
+    MAX1784Xcomms_ReadAndCheckM873ModelAndVersion();
+  #endif
+
     //LTC68042configure_communicationTest(); //WGCToDo: just an idea
     //LTC68042configure_VrefTest(); //WGCToDo: just an idea (haven't looked at what this entails)
     //LTC68042result_saneVoltagesTest(); //WGCToDo: just an idea

@@ -55,20 +55,67 @@ bool MAX1784Xcomms_checkActualVsExpected(
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-//Read and return MAX17841 ASCI chip Model and Version
-uint16_t MAX1784Xcomms_ReadModelAndVersion(void)
+//Read and verify MAX17841 ASCI chip Model and Version
+bool MAX1784Xcomms_ReadAndCheckM871ModelAndVersion(void)
 {
-  const uint8_t CMD_LENGTH = 1; // bytes to in command
-  const uint8_t DATA_LENGTH = 2;
-  uint8_t cmd[CMD_LENGTH];
-  uint8_t data[DATA_LENGTH];
+    bool allOk = true;
+    const uint8_t CMD_LENGTH = 1; // bytes to in command
+    const uint8_t DATA_LENGTH = 2;
+    uint8_t cmd[CMD_LENGTH];
+    uint8_t data[DATA_LENGTH];
 
-  // write out M871_READREG_MODEL (command), read back 2 bytes:
-  //   with DATA_LENGTH = 2, take advantage of reading sequential registers
-  //   and get both model and version in 1 transaction
-  cmd[0] = M871_READREG_MODEL_MSB;
-  LTC68042configure_spiWriteRead(cmd, CMD_LENGTH, &data[0], DATA_LENGTH);
-  return ((data[0] << 8) | data[1]);
+    // write out M871_READREG_MODEL (command), read back 2 bytes:
+    //   with DATA_LENGTH = 2, take advantage of reading sequential registers
+    //   and get both model and version in 1 transaction
+    cmd[0] = M871_READREG_MODEL_MSB;
+    LTC68042configure_spiWriteRead(cmd, CMD_LENGTH, &data[0], DATA_LENGTH);
+
+    // MAX17841 model and version should be 0x8417
+    allOk = MAX1784Xcomms_checkActualVsExpected(
+      (uint16_t)((data[0] << 8) | data[1]),
+      (uint16_t)((M871_MODEL << M871_VERSION_bfModelLsb_SIZE) | M871_VERSION),
+      "Model/Version", __func__);
+    return(allOk);
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+//Read and verify MAX17843 BMS chip Model and Version
+bool MAX1784Xcomms_ReadAndCheckM873ModelAndVersion(void)
+{
+    bool allOk = true;
+    char msg[30];
+    uint32_t moduleId[TOTAL_IC];
+    uint16_t registerValue[TOTAL_IC];
+
+    // Get LSB of ID from ID1
+    MAX1784Xcomms_readAll843Reg(M873_ID1, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
+    for (int ICx = 0; ICx < TOTAL_IC; ICx++) {
+        moduleId[ICx] = registerValue[mapIc2Dev[ICx]];
+    }
+    // Get MSB of ID and ROM CRC from ID2
+    MAX1784Xcomms_readAll843Reg(M873_ID2, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
+    Serial.println();
+    for (int ICx = 0; ICx < TOTAL_IC; ICx++) {
+        moduleId[ICx] += ((uint32_t)BFN_GET(M873_ID2_bfDEVIDMsb, registerValue[mapIc2Dev[ICx]]) << 16);
+        Serial.print(F("Module "));
+        Serial.print(ICx);
+        Serial.print(F(" (device "));
+        Serial.print(mapIc2Dev[ICx]);
+        Serial.print(F(") has ID: 0x"));
+        Serial.print(moduleId[ICx], HEX);
+        Serial.print(F(" and ROM CRC: 0x"));
+        Serial.println(BFN_GET(M873_ID2_bfROMCRC, registerValue[mapIc2Dev[ICx]]), HEX);
+    }
+
+    strcpy(msg, "device ");
+    msg[7] = '0';
+    strcpy(&(msg[8]), " Model/version");
+    MAX1784Xcomms_readAll843Reg(M873_VERSION, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
+    for (int ICx = 0; ICx < TOTAL_IC; ICx++) {
+        msg[7] = (char)ICx + '0';
+        allOk &= MAX1784Xcomms_checkActualVsExpected(registerValue[mapIc2Dev[ICx]], M873_MODEL_VERSION, msg, __func__);
+    }
+    return(allOk);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -95,16 +142,10 @@ void MAX1784Xcomms_max17841_Init(void)
 {
   const uint8_t CMD_LENGTH_1 = 1; // bytes in command
   const uint8_t CMD_LENGTH_2 = 2; // bytes in command
+  const uint8_t CMD_LENGTH_3 = 3; // bytes in command
   const uint8_t DATA_LENGTH = 2;
-  uint8_t cmd[CMD_LENGTH_2];
+  uint8_t cmd[CMD_LENGTH_3];
   uint8_t data[DATA_LENGTH];
-
-  //WGCToDo speedup: Move model/version check to end of coldboot or sometime later
-  // mod/version should be 0x8417
-  MAX1784Xcomms_checkActualVsExpected(
-    MAX1784Xcomms_ReadModelAndVersion(),
-    (uint16_t)((M871_MODEL << M871_VERSION_bfModelLsb_SIZE) | M871_VERSION),
-    "Model/Version", __func__);
 
   // check and then clear POR flag
   cmd[0] = M871_READREG_TX_INTERRUPT_FLAGS;
@@ -124,16 +165,13 @@ void MAX1784Xcomms_max17841_Init(void)
   cmd[1] = M871_KEEP_ALIVE_10_USEC;
   LTC68042configure_spiWrite(CMD_LENGTH_2, cmd);
 
-  //WGCToDo speedup: M871 RX_INTERRUPT_ENABLE and TX_INTERRUPT_ENABLE are sequential. These could be combined
+  //NB: M871 RX_INTERRUPT_ENABLE and TX_INTERRUPT_ENABLE are sequential registers, so are done in 1 transaction
   // Set Rx_interrupt enable register RX_Error_int_enable and RX_Overflow_INT_Enable bits
+  // Set TX_interrupt enable register TX_Overflow_INT_Enable bit
   cmd[0] = M871_WRITEREG_RX_INTERRUPT_ENABLE;
   cmd[1] = M871_RX_INTERRUPT_ENABLE_INIT;
-  LTC68042configure_spiWrite(CMD_LENGTH_2, cmd);
-
- // Set TX_interrupt enable register TX_Overflow_INT_Enable bit
-  cmd[0] = M871_WRITEREG_TX_INTERRUPT_ENABLE;
-  cmd[1] = BITVALUE(M871_TX_INTEN_TX_Overflow_INT_Enable);
-  LTC68042configure_spiWrite(CMD_LENGTH_2, cmd);
+  cmd[2] = M871_TX_INTERRUPT_ENABLE_INIT;
+  LTC68042configure_spiWrite(CMD_LENGTH_3, cmd);
 
   // Clear Receive Buffer
   cmd[0] = M871_CMD_CLR_RX_BUF;
@@ -722,7 +760,6 @@ int MAX1784Xcomms_enumerateDevices(void)
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
-
 // Read a single register from all devices
 //   register given by regAddr
 //   register values left in resultBuff[]
@@ -1037,13 +1074,7 @@ void MAX1784Xcomms_setup843Registers(int Device_count)
   // since DEVCFG1 has now been set, from this point on we can do alive count checking
   MAX1784Xcomms_enableAliveCount();
 
-  //WGCToDo speedup: These flags should already be M873_CLEAR_ALL after POR
-  // Set FMEA1 to 0X00 to clear flags
-  MAX1784Xcomms_writeAll843Reg(M873_FMEA1, Device_count, M873_CLEAR_ALL, MCONT_FULL_CHECKS);
-
-  // Set FMEA2 TO 0X00 to clear flags
-  MAX1784Xcomms_writeAll843Reg(M873_FMEA2, Device_count, M873_CLEAR_ALL, MCONT_FULL_CHECKS);
-  //WGCToDo speedup: end of setup to skip
+  //NB: FMEA1/2 flags should already be M873_CLEAR_ALL after POR
 
   // Set measurement enables (MEASUREEN) and acquisition parameters
   MAX1784Xcomms_writeAll843Reg(M873_MEASUREEN, Device_count, M873_MEASUREEN_INIT, MCONT_FULL_CHECKS);

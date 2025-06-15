@@ -197,6 +197,7 @@ void validateAndStoreNextCVR(uint8_t chipAddress, char cellVoltageRegister)
 /////////////////////////////////////////////////////////////////////////////////////////
 
 #else
+//WGCToDo: speedup: Change to 3 cells at a time, plus a separate function for thermistors and die temps
 //Validate specified MAX17843 cell readings
 //store valid cell voltages in cellVoltages_counts[][]
 //  (private method)
@@ -300,11 +301,19 @@ void processAllCellVoltages(void)
           #ifdef BMS_TYPE_LiBCM
             uint16_t cellVoltageUnderTest = cellVoltages_counts[chip][cell];
           #else
-            //WGCToDoLater: the floating multiply could be replaced by a faster integer multiply then right shift
-            //WGCToDoLater:    x * 0.762939 -> ((x * 49) >> 6) [0.35% error)
-            //WGCToDoLater:   see "Mult>> Finder" tab in Motherboard/RevC/V&V/OEM Current Sensor.ods
-            //WGCToDoLater: Maybe do fast/close while key-on, and slow/accurate while key-off?
-            uint16_t cellVoltageUnderTest = (uint16_t)((float)cellVoltages_counts[chip][cell] * MAX17873_CONVERSION_TO_100uV_per_bit) ;
+            //the floating multiply can be replaced by a faster integer multiply then right shift
+            //  x * 0.762939                       (8916 uSec for 600 cell conversions and specificCellVoltage_set() calls)
+            //   -> ((x * 49) >> 6) [0.35% error)  (3788 uSec for 600 cell conversions and specificCellVoltage_set() calls)
+            //  see "Mult>> Finder" tab in Motherboard/RevC/V&V/OEM Current Sensor.ods
+            uint16_t cellVoltageUnderTest;
+            if (KEYSTATE_ON == key_getSampledState()) {
+                //then need fastest, accept less accuracy
+                cellVoltageUnderTest = (uint16_t)(((uint32_t)cellVoltages_counts[chip][cell] * 49) >> 6);
+            }
+            else {
+                // we have time, go for accuracy
+                cellVoltageUnderTest = (uint16_t)((float)cellVoltages_counts[chip][cell] * MAX17873_CONVERSION_TO_100uV_per_bit) ;
+            }
           #endif
 
             //accumulate Vpack
