@@ -371,7 +371,7 @@ void processAllCellVoltages(void)
 
 bool checkIfAdcWaitOver(void)
 {
-    if ((LTC6804_MAX_CONVERSION_TIME_ms * 1000) < (micros() - conversionStart_us)) {
+    if (conversionExpectedDuration_us < (micros() - conversionStart_us)) {
       #ifdef BMS_TYPE_WGCLiBCM
         if (autoBalSwDis) {
             //then we need to turn it back off so that cell balancing can continue
