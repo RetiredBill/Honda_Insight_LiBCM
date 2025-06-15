@@ -56,7 +56,6 @@ void startCellConversionAndResetCellCounters(void)
     LTC68042configure_spiWrite(4,cmd); //send 'adcv' command to all LTC6804s (broadcast command)
     conversionStart_us = micros();
     conversionExpectedDuration_us = (LTC6804_MAX_CONVERSION_TIME_ms * 1000);
-    cellVoltageRegister = 'A';
 
   #else
     // MAX17843 ICs
@@ -98,6 +97,7 @@ void startCellConversionAndResetCellCounters(void)
 
   #endif
 
+    cellVoltageRegister = 'A';
     chipAddress = FIRST_IC_ADDR; //reset to first LTC IC
 }
 
@@ -127,6 +127,7 @@ void serialReadCVR( uint8_t chipAddress, char cellVoltageRegister, uint8_t *data
 
     LTC68042configure_spiWriteRead(cmd,4,&data[0],8);
 }
+#endif
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -135,17 +136,29 @@ void serialReadCVR( uint8_t chipAddress, char cellVoltageRegister, uint8_t *data
 //  (private method)
 void validateAndStoreNextCVR(uint8_t chipAddress, char cellVoltageRegister)
 {
+  #ifdef BMS_TYPE_LiBCM
     const uint8_t NUM_BYTES_IN_REG  = 6; //QTY3 cells * 2B/cell
     const uint8_t NUM_RX_BYTES      = 8; //NUM_BYTES_IN_REG + 2B PEC
+  #endif
     const uint8_t MAX_READ_ATTEMPTS = 3; //max attempts to read back CVR without PEC error
 
     uint8_t attemptCounter = 0;
+  #ifdef BMS_TYPE_LiBCM
     uint16_t received_pec;
     uint16_t calculated_pec;
+  #else
+    int messageControl = LTC68042comms_fullErrorChecking_get() ? MCONT_FULL_CHECKS : MCONT_RX_MINIMUM_CHECKS;
+    int dev = mapIc2Dev[chipAddress];
+    bool readOk = true;
+    uint16_t rawReadings[3];
+    // rawReadings[0:2]  up to 3 readings
+    uint16_t rawDieTemp; // raw die temp
+  #endif
     uint16_t cellX_Voltage_counts;
     uint16_t cellY_Voltage_counts;
     uint16_t cellZ_Voltage_counts;
 
+  #ifdef BMS_TYPE_LiBCM
     do //repeats until PECs match (i.e. no data transmission errors)
     {
         uint8_t returnedData[NUM_RX_BYTES];
@@ -192,59 +205,81 @@ void validateAndStoreNextCVR(uint8_t chipAddress, char cellVoltageRegister)
     cellVoltages_counts[chipAddress - FIRST_IC_ADDR][cellX] = cellX_Voltage_counts;
     cellVoltages_counts[chipAddress - FIRST_IC_ADDR][cellY] = cellY_Voltage_counts;
     cellVoltages_counts[chipAddress - FIRST_IC_ADDR][cellZ] = cellZ_Voltage_counts;
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////
-
-#else
-//WGCToDo: speedup: Change to 3 cells at a time, plus a separate function for thermistors and die temps
-//Validate specified MAX17843 cell readings
-//store valid cell voltages in cellVoltages_counts[][]
-//  (private method)
-void validateAndStoreNextMAX17843(uint8_t chipAddress)
-{
-    const uint8_t MAX_READ_ATTEMPTS = 3; //max attempts to read back CVR without PEC error
-
-    int messageControl = LTC68042comms_fullErrorChecking_get() ? MCONT_FULL_CHECKS : MCONT_RX_MINIMUM_CHECKS;
-    int dev = mapIc2Dev[chipAddress];
-    uint8_t attemptCounter = 0;
-    bool readOk = true;
-    uint16_t rawReadings[(1 + M873_TOTAL - M873_CELL1)];
-    // rawReadings[0:11]  12 cell voltages
-    // rawReadings[12]    Vblock
-    // rawReadings[13]    thermistor 1
-    // rawReadings[14]    thermistor 2
-    // rawReadings[15]    total voltage
-    uint16_t rawDieTemp; // raw die temp
-
-    do //repeats until PECs match (i.e. no data transmission errors)
+  #else
+    do //repeats until no data transmission errors
     {
-        readOk &= MAX1784Xcomms_readBlock843(M873_CELL1, (1 + M873_TOTAL - M873_CELL1), dev, rawReadings, messageControl);
-        if (! readOk) MAX1784Xcomms_diagnoseErrors(__func__);
-        readOk &= MAX1784Xcomms_readDev843Reg(M873_DIAG, dev, &rawDieTemp, messageControl);
-        if (! readOk) MAX1784Xcomms_diagnoseErrors(__func__);
+        if (cellVoltageRegister < 'E') {
+            // do cell voltages
+            int startRegAddr;
+            switch (cellVoltageRegister) //choose which "cell voltage register" to read
+            {
+                case 'A': startRegAddr = M873_CELL1;  break;
+                case 'B': startRegAddr = M873_CELL4;  break;
+                case 'C': startRegAddr = M873_CELL7;  break;
+                case 'D': startRegAddr = M873_CELL10; break;
+            }
+            readOk &= MAX1784Xcomms_readBlock843(startRegAddr, 3, dev, rawReadings, messageControl);
+            if (! readOk) MAX1784Xcomms_diagnoseErrors(__func__);
+
+            cellX_Voltage_counts = rawReadings[0];
+            cellY_Voltage_counts = rawReadings[1];
+            cellZ_Voltage_counts = rawReadings[2];
+        }
+        else {
+            // do temperature readings
+            readOk &= MAX1784Xcomms_readBlock843(M873_AUXIN1, 2, dev, rawReadings, messageControl);
+            if (! readOk) MAX1784Xcomms_diagnoseErrors(__func__);
+            readOk &= MAX1784Xcomms_readDev843Reg(M873_DIAG, dev, &rawDieTemp, messageControl);
+            if (! readOk) MAX1784Xcomms_diagnoseErrors(__func__);
+        }
+
         if (attemptCounter++ > 1) { LTC68042result_errorCount_increment(); } //log each error
     } while ((!readOk) && (attemptCounter < MAX_READ_ATTEMPTS)); //retry if error
 
-    //store cell voltage results
-    if (attemptCounter >= MAX_READ_ATTEMPTS) {
-        //too many errors occurred
-        for (int cell = 0; cell < CELLS_PER_IC; cell++) {
-            cellVoltages_counts[chipAddress][cell] =  0;
+    if (cellVoltageRegister < 'E') {
+        if (attemptCounter >= MAX_READ_ATTEMPTS)
+        {
+            //too many errors occurred
+            cellX_Voltage_counts = 0;
+            cellY_Voltage_counts = 0;
+            cellZ_Voltage_counts = 0;
         }
-        temperature_ModuleDie_setLatest_counts(chipAddress, 0);
+
+        //Determine which LTC cell voltages were read into returnedData
+        uint8_t cellX=0; //1st cell in returnedData (LTC cell 1, 4, 7, or 10)
+        uint8_t cellY=0; //2nd cell in returnedData (LTC cell 2, 5, 8, or 11)
+        uint8_t cellZ=0; //3rd cell in returnedData (LTC cell 3, 6, 9, or 12)
+        switch (cellVoltageRegister)  //LUT to prevent QTY3 multiplies & QTY12 adds per call
+        {
+            case 'A': cellX=0;  cellY=1;  cellZ=2 ; break; //LTC cells  1/ 2/ 3 (LTC 1-indexed, array 0-indexed)
+            case 'B': cellX=3;  cellY=4;  cellZ=5 ; break; //LTC cells  4/ 5/ 6
+            case 'C': cellX=6;  cellY=7;  cellZ=8 ; break; //LTC cells  7/ 8/ 9
+            case 'D': cellX=9;  cellY=10; cellZ=11; break; //LTC cells 10/11/12
+            default: Serial.print(F("\nillegal CVR index")); while (1) {;} //hang here until watchdog resets.
+        }
+
+        //store cell voltage results
+        cellVoltages_counts[chipAddress - FIRST_IC_ADDR][cellX] = cellX_Voltage_counts;
+        cellVoltages_counts[chipAddress - FIRST_IC_ADDR][cellY] = cellY_Voltage_counts;
+        cellVoltages_counts[chipAddress - FIRST_IC_ADDR][cellZ] = cellZ_Voltage_counts;
     }
     else {
-        for (int cell = 0; cell < CELLS_PER_IC; cell++) {
-            cellVoltages_counts[chipAddress][cell] =  rawReadings[cell];
+        //store temperature results
+        if (attemptCounter >= MAX_READ_ATTEMPTS) {
+            //too many errors occurred
+            temperature_ModuleTherm_setLatest_counts(chipAddress, 0, 0);
+            temperature_ModuleTherm_setLatest_counts(chipAddress, 1, 0);
+            temperature_ModuleDie_setLatest_counts(chipAddress, 0);
         }
-        temperature_ModuleTherm_setLatest_counts(chipAddress, 0, rawReadings[13]);
-        temperature_ModuleTherm_setLatest_counts(chipAddress, 1, rawReadings[14]);
-        temperature_ModuleTherm_setSampleTime_ms(millis());
-        temperature_ModuleDie_setLatest_counts(chipAddress, rawDieTemp);
+        else {
+            temperature_ModuleTherm_setLatest_counts(chipAddress, 0, rawReadings[0]);
+            temperature_ModuleTherm_setLatest_counts(chipAddress, 1, rawReadings[1]);
+            temperature_ModuleTherm_setSampleTime_ms(millis());
+            temperature_ModuleDie_setLatest_counts(chipAddress, rawDieTemp);
+        }
     }
+  #endif
 }
-#endif
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -403,20 +438,20 @@ uint8_t doCellDataGather(uint8_t triggerMode)
 
     uint8_t nextPresentState = LTC_STATE_GATHER; // default to remaining in gather state
 
-  #ifndef BMS_TYPE_LiBCM
-    // for MAX17843 BMS, do 12 cells at a time
-    validateAndStoreNextMAX17843(chipAddress);
-  #else
     //retrieve next CVR from LTC, then validate and store in cellVoltages_counts[][] array
     validateAndStoreNextCVR(chipAddress, cellVoltageRegister);
 
     //determine which LTC68042 IC & CVR to read next
     cellVoltageRegister++;
+  #ifndef BMS_TYPE_LiBCM
     if (cellVoltageRegister >= 'E')
+  #else
+    // there is an extra (fake) "register" to capture module temperatures
+    if (cellVoltageRegister >= 'F')
+  #endif
     {
         //LTC6804 only has registers A,B,C,D
         cellVoltageRegister = 'A'; //reset back to first CVR
-  #endif
         if (++chipAddress >= (FIRST_IC_ADDR + TOTAL_IC))
         {
             //last "LTC_STATE_GATHER" call for this cycle
@@ -436,9 +471,7 @@ uint8_t doCellDataGather(uint8_t triggerMode)
                 while (1) {;} //hang here until watchdog resets.
             }
         }
-  #ifdef BMS_TYPE_LiBCM
     }
-  #endif
     return nextPresentState;
 }
 
