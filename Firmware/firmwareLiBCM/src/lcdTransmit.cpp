@@ -15,6 +15,7 @@ lcd_I2C_jts lcd2(0x27);
 
 //These state variables are reset during key or grid charger state change
 uint8_t  cycleFrameNumber = CYCLEFRAME_A;
+bool     cycleFrameNumberChanged = true;
 bool     areAllStaticValuesDisplayed  =  NO;
 
 //These display variables are reset during key or grid charger state change
@@ -59,8 +60,10 @@ bool whichCycleFrameToDisplay(void)
     if(timeKeyOn_ms - lastTimeFrameChanged_ms >= frameDisplayPeriod_ms)
     {
         lastTimeFrameChanged_ms = timeKeyOn_ms;
+        cycleFrameNumberChanged = true;
         if(++cycleFrameNumber > CYCLEFRAME_MAX_VALUE) { cycleFrameNumber = CYCLEFRAME_A; }
     }
+    else { cycleFrameNumberChanged = false; }
 
     return SCREEN_DIDNT_UPDATE;
 }
@@ -107,21 +110,20 @@ bool lcd_printTime_unitless(void)
 {
     bool didscreenUpdateOccur = SCREEN_DIDNT_UPDATE;
 
-    lcd2.setCursor(0,3);
-
   #ifdef WGC_DEBUG_SPEEDUP_MODE_CHANGES
     if (false)
   #else
     if (cycleFrameNumber == CYCLEFRAME_A)
   #endif
     {
-        //"FWuuuu" //firmware expiration time in hours
-        lcd2.print(F("FW"));
-
         uint16_t firmwareExpirationTime_hours = REQUIRED_FIRMWARE_UPDATE_PERIOD_HOURS - eeprom_hoursSinceLastFirmwareUpdate_get();
 
-        if (timeValue_onScreen != firmwareExpirationTime_hours)
+        if ((cycleFrameNumberChanged) || (timeValue_onScreen != firmwareExpirationTime_hours))
         {
+            //"FWuuuu" //firmware expiration time in hours
+            lcd2.setCursor(0,3);
+            lcd2.print(F("FW"));
+
             if      (firmwareExpirationTime_hours < 10  ) { lcd2.print(F("   ")); } //("   0":"   9")
             else if (firmwareExpirationTime_hours < 100 ) { lcd2.print(F("  ") ); } //("  10":"  99")
             else if (firmwareExpirationTime_hours < 1000) { lcd2.print( (' ' ) ); } //(" 100":" 999")
@@ -138,13 +140,14 @@ bool lcd_printTime_unitless(void)
     else if (cycleFrameNumber == CYCLEFRAME_B)
   #endif
    {
-        //"tuuuuu" //keyOn uptime in seconds
-        lcd2.print(F("t"));
-
         uint16_t timeSeconds = time_sinceLatestKeyOn_seconds();
 
-        if (timeValue_onScreen != timeSeconds)
+        if ((cycleFrameNumberChanged) || (timeValue_onScreen != timeSeconds))
         {
+            //"tuuuuu" //keyOn uptime in seconds
+            lcd2.setCursor(0,3);
+            lcd2.print(F("t"));
+
             if      (timeSeconds < 10   ) { lcd2.print(F("    ")); } //("    0":"    9")
             else if (timeSeconds < 100  ) { lcd2.print(F("   ") ); } //("   10":"   99")
             else if (timeSeconds < 1000 ) { lcd2.print(F("  ")  ); } //("  100":"  999")
@@ -169,8 +172,6 @@ bool lcd_printWattHours(void)
 {
     bool didscreenUpdateOccur = SCREEN_DIDNT_UPDATE;
 
-    lcd2.setCursor(12,3);
-
     uint16_t wattHoursAssist = 12345; //JTS2doNow: Add total watt hour math function
     uint16_t wattHoursRegen  =     5; //JTS2doNow: Add total watt hour math function
 
@@ -179,8 +180,9 @@ bool lcd_printWattHours(void)
     else if (cycleFrameNumber == CYCLEFRAME_B) { wattHours_new = wattHoursRegen;  }
 
 
-    if (wattHours_new != wattHours_onScreen)
+    if ((cycleFrameNumberChanged) || (wattHours_new != wattHours_onScreen))
     {
+        lcd2.setCursor(12,3);
                                                                      //("RxxxxxWh:RxxxxxWh")
         if      (wattHours_new < 10   ) { lcd2.print(F("    ")); } //("    r0":"    r9")
         else if (wattHours_new < 100  ) { lcd2.print(F("   ") ); } //("   r10":"   r99")
@@ -702,15 +704,15 @@ void lcdTransmit_splashscreenKeyOff(void)
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-bool lcd_updateValue(uint8_t stateToUpdate)
+bool lcd_updateValue(enum_LCDVALUE stateToUpdate)
 {
     bool didScreenUpdateOccur = SCREEN_DIDNT_UPDATE;
     switch (stateToUpdate)
     {
         case LCDVALUE_CALC_CYCLEFRAME: didScreenUpdateOccur = whichCycleFrameToDisplay();      break;
-        case LCDVALUE_SECONDS        : didScreenUpdateOccur = lcd_printTime_unitless();        break;
-        case LCDVALUE_VPACK_ACTUAL   : didScreenUpdateOccur = lcd_printStackVoltage_actual();  break;
-        case LCDVALUE_VPACK_SPOOFED  : didScreenUpdateOccur = lcd_printStackVoltage_spoofed(); break;
+//        case LCDVALUE_SECONDS        : didScreenUpdateOccur = lcd_printTime_unitless();        break;
+//        case LCDVALUE_VPACK_ACTUAL   : didScreenUpdateOccur = lcd_printStackVoltage_actual();  break;
+//        case LCDVALUE_VPACK_SPOOFED  : didScreenUpdateOccur = lcd_printStackVoltage_spoofed(); break;
         case LCDVALUE_LTC6804_ERRORS : didScreenUpdateOccur = lcd_printLTC6804Errors();        break;
         case LCDVALUE_CELL_HI        : didScreenUpdateOccur = lcd_printCellVoltage_hi();       break;
         case LCDVALUE_CELL_LO        : didScreenUpdateOccur = lcd_printCellVoltage_lo();       break;
@@ -726,7 +728,7 @@ bool lcd_updateValue(uint8_t stateToUpdate)
         case LCDVALUE_HEATER_STATUS  : didScreenUpdateOccur = lcd_printHeaterStatus();         break;
         case LCDVALUE_BALANCE_STATUS : didScreenUpdateOccur = lcd_cellBalanceStatus();         break;
         case LCDVALUE_FLASH_BACKLIGHT: didScreenUpdateOccur = lcd_flashBacklight();            break;
-        case LCDVALUE_WATT_HOURS     : didScreenUpdateOccur = lcd_printWattHours();            break;
+//        case LCDVALUE_WATT_HOURS     : didScreenUpdateOccur = lcd_printWattHours();            break;
         default                      : didScreenUpdateOccur = SCREEN_UPDATED;                  break;
     }
 
