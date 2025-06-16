@@ -90,6 +90,7 @@ void configureDischargeResistors(void)
         LTC68042configure_setBalanceResistors((ic + FIRST_IC_ADDR), cellsToDischarge[ic], LTC6804_DISCHARGE_TIMEOUT_02_SECONDS);
     }
   #else
+    Serial.print(F("\n"));//WGCToDo: temporary debugging
     for (uint8_t ic = 0; ic < TOTAL_IC; ic++) {
         // Only balance if die temperature is below limit
         dieRawCounts2Temp(temperature_ModuleDie_getLatest_counts(ic)); Serial.print(" ");//WGCToDo: temporary debugging

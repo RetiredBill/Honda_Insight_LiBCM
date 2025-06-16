@@ -235,6 +235,22 @@
       (M871_RX_INTEN_INIT_RX_BUSY_INT_ENABLE     << M871_RX_INTEN_RX_Busy_INT_Enable    ) + \
       (M871_RX_INTEN_INIT_RX_ERROR_INT_ENABLE    << M871_RX_INTEN_RX_Error_INT_Enable   )
 
+    // MAX17841 TX_INTERRUPT_ENABLE register bit value config defaults. "0b1" enables, "0b0" disables
+    #define M871_TX_INTEN_INIT_TX_BUSY_INT_ENABLE      0b0 // Interrupt enable for TX_Busy_INT_Enable
+    #define M871_TX_INTEN_INIT_TX_IDLE_INT_ENABLE      0b0 // Interrupt enable for TX_Idle_INT_Enable
+    #define M871_TX_INTEN_INIT_TX_OVERFLOW_INT_ENABLE  0b1 // Interrupt enable for TX_Overflow_INT_Enable
+    #define M871_TX_INTEN_INIT_TX_FULL_INT_ENABLE      0b0 // Interrupt enable for TX_Full_INT_Enable
+    #define M871_TX_INTEN_INIT_TX_AVAILABLE_INT_ENABLE 0b0 // Interrupt enable for TX_Available_INT_Enable
+    #define M871_TX_INTEN_INIT_TX_EMPTY_INT_ENABLE     0b0 // Interrupt enable for TX_Empty_INT_Enable
+
+    #define M871_TX_INTERRUPT_ENABLE_INIT \
+      (M871_TX_INTEN_INIT_TX_BUSY_INT_ENABLE      << M871_TX_INTEN_TX_Busy_INT_Enable     ) + \
+      (M871_TX_INTEN_INIT_TX_IDLE_INT_ENABLE      << M871_TX_INTEN_TX_Idle_INT_Enable     ) + \
+      (M871_TX_INTEN_INIT_TX_OVERFLOW_INT_ENABLE  << M871_TX_INTEN_TX_Overflow_INT_Enable ) + \
+      (M871_TX_INTEN_INIT_TX_FULL_INT_ENABLE      << M871_TX_INTEN_TX_Full_INT_Enable     ) + \
+      (M871_TX_INTEN_INIT_TX_AVAILABLE_INT_ENABLE << M871_TX_INTEN_TX_Available_INT_Enable) + \
+      (M871_TX_INTEN_INIT_TX_EMPTY_INT_ENABLE     << M871_TX_INTEN_TX_Empty_INT_Enable    )
+
     // MAX17843 STATUS register bit value config defaults. "0b1" enables, "0b0" disables
     #define M873_STATUS_INIT_ALRTRST             0b0
     #define M873_STATUS_INIT_ALRTOV              0b0

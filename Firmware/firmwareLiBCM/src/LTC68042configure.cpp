@@ -225,7 +225,6 @@ void LTC68042configure_programVolatileDefaults(void)
 
     bool allOk = true;
     char msg[30];
-    uint32_t moduleId[TOTAL_IC];
     uint16_t registerValue[TOTAL_IC];
 
     // Initialize all MAX17843 chips via reset.
@@ -265,35 +264,6 @@ void LTC68042configure_programVolatileDefaults(void)
     // Note: since ALIVECNTEN bit in DEVCFG1 register has not benn set yet, Alive counter byte is not useful yet.
     MAX1784Xcomms_disableAliveCount();  // disable alive-count checking for now
 
-    //WGCToDo speedup: Move checks to end of coldboot or sometime later
-    // These all should return a data-check of DATA_CHECK_EXPECTED_POR
-    // Get LSB of ID from ID1
-    MAX1784Xcomms_readAll843Reg(M873_ID1, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
-    for (int ICx = 0; ICx < TOTAL_IC; ICx++) {
-        moduleId[ICx] = registerValue[mapIc2Dev[ICx]];
-    }
-    // Get MSB of ID and ROM CRC from ID2
-    MAX1784Xcomms_readAll843Reg(M873_ID2, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
-    Serial.println();
-    for (int ICx = 0; ICx < TOTAL_IC; ICx++) {
-        moduleId[ICx] += ((uint32_t)BFN_GET(M873_ID2_bfDEVIDMsb, registerValue[mapIc2Dev[ICx]]) << 16);
-        Serial.print(F("Device "));
-        Serial.print(ICx);
-        Serial.print(F(" has ID: 0x"));
-        Serial.print(moduleId[ICx], HEX);
-        Serial.print(F(" and ROM CRC: 0x"));
-        Serial.println(BFN_GET(M873_ID2_bfROMCRC, registerValue[mapIc2Dev[ICx]]), HEX);
-    }
-
-    strcpy(msg, "device ");
-    msg[7] = '0';
-    strcpy(&(msg[8]), " Model/version");
-    MAX1784Xcomms_readAll843Reg(M873_VERSION, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
-    for (int ICx = 0; ICx < TOTAL_IC; ICx++) {
-        msg[7] = (char)ICx + '0';
-        allOk &= MAX1784Xcomms_checkActualVsExpected(registerValue[mapIc2Dev[ICx]], M873_MODEL_VERSION, msg, __func__);
-    }
-
     // Read STATUS, and verify all just have M873_STATUS_ALRTRST set, with data-check of DATA_CHECK_EXPECTED_POR
     strcpy(&(msg[8]), " STATUS");
     MAX1784Xcomms_readAll843Reg(M873_STATUS, TOTAL_IC, registerValue, MCONT_FULL_CHECKS);
@@ -315,7 +285,6 @@ void LTC68042configure_programVolatileDefaults(void)
         msg[7] = (char)ICx + '0';
         allOk &= MAX1784Xcomms_checkActualVsExpected(registerValue[mapIc2Dev[ICx]], M873_CLEAR_ALL, msg, __func__);
     }
-    //WGCToDo speedup: end of checks to defer
 
     // configure all MAX17842 registers
     MAX1784Xcomms_setup843Registers(TOTAL_IC);

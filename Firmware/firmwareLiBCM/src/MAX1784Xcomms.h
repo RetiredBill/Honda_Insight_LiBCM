@@ -95,6 +95,8 @@
   void MAX1784Xcomms_setJustWokeUpState(bool justWokeUp);
   bool MAX1784Xcomms_max17841_CheckForPOR(void);
   void MAX1784Xcomms_max17841_Init(void);
+  bool MAX1784Xcomms_ReadAndCheckM871ModelAndVersion(void);
+  bool MAX1784Xcomms_ReadAndCheckM873ModelAndVersion(void);
   void MAX1784Xcomms_setup843Registers(int Device_count);
   void MAX1784Xcomms_max17843_reset(void);
   void MAX1784Xcomms_max17841_shutdown(void);
