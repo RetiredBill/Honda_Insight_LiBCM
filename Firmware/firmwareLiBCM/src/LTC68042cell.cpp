@@ -262,6 +262,7 @@ void validateAndStoreNextCVR(uint8_t chipAddress, char cellVoltageRegister)
         cellVoltages_counts[chipAddress - FIRST_IC_ADDR][cellX] = cellX_Voltage_counts;
         cellVoltages_counts[chipAddress - FIRST_IC_ADDR][cellY] = cellY_Voltage_counts;
         cellVoltages_counts[chipAddress - FIRST_IC_ADDR][cellZ] = cellZ_Voltage_counts;
+
     }
     else {
         //store temperature results
@@ -443,7 +444,7 @@ uint8_t doCellDataGather(uint8_t triggerMode)
 
     //determine which LTC68042 IC & CVR to read next
     cellVoltageRegister++;
-  #ifndef BMS_TYPE_LiBCM
+  #ifdef BMS_TYPE_LiBCM
     if (cellVoltageRegister >= 'E')
   #else
     // there is an extra (fake) "register" to capture module temperatures
