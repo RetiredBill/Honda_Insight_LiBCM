@@ -512,8 +512,6 @@
     void LTC68042configure_acqusitionPrecision_set(bool acqAccuracyTradeoff);
     void MAX17841configure_enableMAX17841(void);
     void MAX17841configure_disableMAX17841(void);
-    void LTC68042configure_enabletestDischargeFETs(void);
-    uint8_t LTC68042configure_testDischargeFETs(void);
     bool LTC68042configure_basicConfidenceTest(void);
     uint16_t MAX17841configure_calcAcquisitionTime_us(
       uint8_t NumCells, bool Ain1En, bool Ain2En, uint8_t AinTime_counts, bool VblkEn, uint8_t DiagSel, uint8_t OvrSmpls,

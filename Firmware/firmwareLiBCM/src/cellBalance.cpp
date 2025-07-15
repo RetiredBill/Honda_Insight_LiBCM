@@ -166,15 +166,7 @@ void cellBalance_handler(void)
 
     if (isBalancingAllowed_now == YES__BALANCING_ALLOWED)
     {
-        if (time_isItTimeToPerformKeyOffTasks() == YES)
-        {
-            uint8_t testDischargeFETsStatus = LTC68042configure_testDischargeFETs();
-            if (TESTDISCHASRGESTATE_DISABLED == testDischargeFETsStatus)
-            {
-                //then now normal cell balancing is OK
-                configureDischargeResistors();
-            }
-        }
+        if (time_isItTimeToPerformKeyOffTasks() == YES) { configureDischargeResistors(); }
     }
     else if (isBalancingAllowed_previous == YES__BALANCING_ALLOWED) { disableDischargeResistors(); }
 
