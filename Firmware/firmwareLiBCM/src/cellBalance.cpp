@@ -45,7 +45,7 @@ void dieRawCounts2Temp(uint16_t rawCounts)
   // 1/(3.07 mv/degC A_VP_PTAT) => 325.733
   float vPTAT = ((unsigned int)(rawCounts) >> 2) * 2.307 / 16384 ;
   float dieTemp = 32.0 + (1.8 * ((vPTAT * 325.733) - 273));
-  Serial.print(dieTemp, 3);
+  Serial.print(dieTemp, 1);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////

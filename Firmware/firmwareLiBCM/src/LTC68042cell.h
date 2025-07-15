@@ -43,7 +43,7 @@
   #ifndef BMS_TYPE_WGCLiBCM
     #define LTC6804_MAX_CONVERSION_TIME_ms 5 //4.43 ms in '2kHz' sampling mode
   #else
-    #define LTC6804_MAX_CONVERSION_TIME_ms 6 //WGCToDo: need to update this value
+    #define LTC6804_MAX_CONVERSION_TIME_ms 6 //Not used in BMS_TYPE_WGCLiBCM, but this is a safer value
 
     // Scale factor 5v/2^^16counts = 76.3uV/bit -> 100 uV/bit
     //   => rawReadings * 5v/(2^^16counts)[V/bit] * 10000[100uV/V] = rawReadings * 0.762939
