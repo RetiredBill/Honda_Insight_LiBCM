@@ -173,7 +173,7 @@ void temperature_measureAndPrintLatestModuleThermCounts(void)
     if (20 < (millis() - tempModuleTherm_sampleTime_ms)) LTC68042cell_acquireAllCellVoltages(); //WGCToDo: this will pick up module thermistors
     for (int ICx = 0; ICx < TOTAL_IC; ICx++) {
         Serial.print(F("\nModule "));
-        Serial.print(ICx + 1);
+        Serial.print(ICx);
         Serial.print(F(" thermistor 1: "));
         Serial.print(tempModuleTherm_counts[ICx][0], HEX);
         Serial.print(F(", 2: "));
