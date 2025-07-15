@@ -321,8 +321,6 @@ bool MAX17843_message873Workhorse(
   int messageControl,
   char * functionName)
 {
-digitalWrite(PIN_LASIG, LOW); // #1
-digitalWrite(PIN_LASIG, HIGH);
   bool allOK = 1;
   uint8_t cmd[2];
   uint8_t rxBuff[4];
@@ -469,15 +467,11 @@ digitalWrite(PIN_LASIG, HIGH);
     }
   }
 
-digitalWrite(PIN_LASIG, LOW); // #2
-digitalWrite(PIN_LASIG, HIGH);
   // Launch the message
   cmd[0] = M871_CMD_WR_NXT_LD_Q0;
   LTC68042configure_spiWrite(1, cmd);
   timestamp_latestEvent_us = micros();
   latestEventDelay_us = 0;
-digitalWrite(PIN_LASIG, LOW); // #3
-digitalWrite(PIN_LASIG, HIGH);
 
   if (messageControl & BITVALUE(MCONT_TX_STATUS_POLL)) {
     // Poll TX_STATUS and wait for TX complete
@@ -580,22 +574,14 @@ digitalWrite(PIN_LASIG, HIGH);
     LTC68042configure_spiWriteRead(cmd, 1, rxBuff, 1);
     allOK &= MAX1784Xcomms_checkActualVsExpected(rxBuff[0], BITVALUE(M871_RX_BYTE_First_Byte), "First_Byte", functionName);
 
-digitalWrite(PIN_LASIG, LOW); // #4
-digitalWrite(PIN_LASIG, HIGH);
     // Read received message data
     cmd[0] = M871_CMD_RX_RD_POINTER;
     LTC68042configure_spiWriteRead(cmd, 1, rx_data, rx_length);
-digitalWrite(PIN_LASIG, LOW); // #5
-digitalWrite(PIN_LASIG, HIGH);
   }
   else if (messageControl & BITVALUE(MCONT_RX_MESSAGE)) {
-digitalWrite(PIN_LASIG, LOW); // #4
-digitalWrite(PIN_LASIG, HIGH);
     // Read received message data
     cmd[0] = M871_CMD_RD_NXT_MSG;
     LTC68042configure_spiWriteRead(cmd, 1, rx_data, rx_length);
-digitalWrite(PIN_LASIG, LOW); // #5
-digitalWrite(PIN_LASIG, HIGH);
   }
   else {
     //WGCToDo:  would need to clear RX buffer? Not implimented yet
@@ -1074,7 +1060,13 @@ void MAX1784Xcomms_setup843Registers(int Device_count)
   // since DEVCFG1 has now been set, from this point on we can do alive count checking
   MAX1784Xcomms_enableAliveCount();
 
-  //NB: FMEA1/2 flags should already be M873_CLEAR_ALL after POR
+  //WGCToDo speedup: These flags should already be M873_CLEAR_ALL after POR
+  // Set FMEA1 to 0X00 to clear flags
+  MAX1784Xcomms_writeAll843Reg(M873_FMEA1, Device_count, M873_CLEAR_ALL, MCONT_FULL_CHECKS);
+
+  // Set FMEA2 TO 0X00 to clear flags
+  MAX1784Xcomms_writeAll843Reg(M873_FMEA2, Device_count, M873_CLEAR_ALL, MCONT_FULL_CHECKS);
+  //WGCToDo speedup: end of setup to skip
 
   // Set measurement enables (MEASUREEN) and acquisition parameters
   MAX1784Xcomms_writeAll843Reg(M873_MEASUREEN, Device_count, M873_MEASUREEN_INIT, MCONT_FULL_CHECKS);
