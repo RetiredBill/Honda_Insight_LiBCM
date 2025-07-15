@@ -149,7 +149,7 @@ void validateAndStoreNextCVR(uint8_t chipAddress, char cellVoltageRegister)
   #else
     int messageControl = LTC68042comms_fullErrorChecking_get() ? MCONT_FULL_CHECKS : MCONT_RX_MINIMUM_CHECKS;
     int dev = mapIc2Dev[chipAddress];
-    bool readOk = true;
+    bool readOk;
     uint16_t rawReadings[3];
     // rawReadings[0:2]  up to 3 readings
     uint16_t rawDieTemp; // raw die temp
@@ -218,7 +218,7 @@ void validateAndStoreNextCVR(uint8_t chipAddress, char cellVoltageRegister)
                 case 'C': startRegAddr = M873_CELL7;  break;
                 case 'D': startRegAddr = M873_CELL10; break;
             }
-            readOk &= MAX1784Xcomms_readBlock843(startRegAddr, 3, dev, rawReadings, messageControl);
+            readOk = MAX1784Xcomms_readBlock843(startRegAddr, 3, dev, rawReadings, messageControl);
             if (! readOk) MAX1784Xcomms_diagnoseErrors(__func__);
 
             cellX_Voltage_counts = rawReadings[0];
@@ -227,10 +227,13 @@ void validateAndStoreNextCVR(uint8_t chipAddress, char cellVoltageRegister)
         }
         else {
             // do temperature readings
-            readOk &= MAX1784Xcomms_readBlock843(M873_AUXIN1, 2, dev, rawReadings, messageControl);
+            readOk = MAX1784Xcomms_readBlock843(M873_AUXIN1, 2, dev, rawReadings, messageControl);
             if (! readOk) MAX1784Xcomms_diagnoseErrors(__func__);
-            readOk &= MAX1784Xcomms_readDev843Reg(M873_DIAG, dev, &rawDieTemp, messageControl);
-            if (! readOk) MAX1784Xcomms_diagnoseErrors(__func__);
+            // need to preserve readOk failure state this time
+            if (! MAX1784Xcomms_readDev843Reg(M873_DIAG, dev, &rawDieTemp, messageControl)) {
+                readOk = false;
+                MAX1784Xcomms_diagnoseErrors(__func__);
+            }
         }
 
         if (attemptCounter++ > 1) { LTC68042result_errorCount_increment(); } //log each error
