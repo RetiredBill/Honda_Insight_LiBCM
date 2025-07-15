@@ -50,7 +50,8 @@
     int8_t temperature_ambient_getLatest(void); //IMA bay temperature
   #endif
   #if defined(THERM_CONFIG_WGCLiBCM)
-    #define TEMPERATURE_MAX_CELL_BALANCE_DIE_TEMP_counts 31234 // 85 degC
+    //#define TEMPERATURE_MAX_CELL_BALANCE_DIE_TEMP_counts 31234 // 85 degC is the chip maximum, but it starts to have errors at lower temps
+    #define TEMPERATURE_MAX_CELL_BALANCE_DIE_TEMP_counts 27135 // 100 degF/38 degC WGCToDo: Temporary kludge: this is what it takes to prevent errors. Why so low?
     uint16_t temperature_ModuleDie_getLatest_counts(uint8_t icAddress);
     void     temperature_ModuleDie_setLatest_counts(uint8_t icAddress, uint16_t temp_counts);
     uint16_t temperature_ModuleTherm_getLatest_counts(uint8_t icAddress, uint8_t thermistor);
