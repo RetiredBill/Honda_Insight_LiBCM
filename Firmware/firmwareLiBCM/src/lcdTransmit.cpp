@@ -710,9 +710,9 @@ bool lcd_updateValue(enum_LCDVALUE stateToUpdate)
     switch (stateToUpdate)
     {
         case LCDVALUE_CALC_CYCLEFRAME: didScreenUpdateOccur = whichCycleFrameToDisplay();      break;
-//        case LCDVALUE_SECONDS        : didScreenUpdateOccur = lcd_printTime_unitless();        break;
-//        case LCDVALUE_VPACK_ACTUAL   : didScreenUpdateOccur = lcd_printStackVoltage_actual();  break;
-//        case LCDVALUE_VPACK_SPOOFED  : didScreenUpdateOccur = lcd_printStackVoltage_spoofed(); break;
+        case LCDVALUE_SECONDS        : didScreenUpdateOccur = lcd_printTime_unitless();        break;
+        case LCDVALUE_VPACK_ACTUAL   : didScreenUpdateOccur = lcd_printStackVoltage_actual();  break;
+        case LCDVALUE_VPACK_SPOOFED  : didScreenUpdateOccur = lcd_printStackVoltage_spoofed(); break;
         case LCDVALUE_LTC6804_ERRORS : didScreenUpdateOccur = lcd_printLTC6804Errors();        break;
         case LCDVALUE_CELL_HI        : didScreenUpdateOccur = lcd_printCellVoltage_hi();       break;
         case LCDVALUE_CELL_LO        : didScreenUpdateOccur = lcd_printCellVoltage_lo();       break;
@@ -728,7 +728,7 @@ bool lcd_updateValue(enum_LCDVALUE stateToUpdate)
         case LCDVALUE_HEATER_STATUS  : didScreenUpdateOccur = lcd_printHeaterStatus();         break;
         case LCDVALUE_BALANCE_STATUS : didScreenUpdateOccur = lcd_cellBalanceStatus();         break;
         case LCDVALUE_FLASH_BACKLIGHT: didScreenUpdateOccur = lcd_flashBacklight();            break;
-//        case LCDVALUE_WATT_HOURS     : didScreenUpdateOccur = lcd_printWattHours();            break;
+        case LCDVALUE_WATT_HOURS     : didScreenUpdateOccur = lcd_printWattHours();            break;
         default                      : didScreenUpdateOccur = SCREEN_UPDATED;                  break;
     }
 

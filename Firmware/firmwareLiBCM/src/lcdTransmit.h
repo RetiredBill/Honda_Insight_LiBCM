@@ -12,9 +12,9 @@
     enum enum_LCDVALUE {
          LCDVALUE_NO_UPDATE = 0,
          LCDVALUE_CALC_CYCLEFRAME,
-//         LCDVALUE_SECONDS,
-//         LCDVALUE_VPACK_ACTUAL,
-//         LCDVALUE_VPACK_SPOOFED,
+         LCDVALUE_SECONDS,
+         LCDVALUE_VPACK_ACTUAL,
+         LCDVALUE_VPACK_SPOOFED,
          LCDVALUE_LTC6804_ERRORS,
          LCDVALUE_CELL_HI,
          LCDVALUE_CELL_LO,
@@ -30,11 +30,10 @@
          LCDVALUE_HEATER_STATUS,
          LCDVALUE_BALANCE_STATUS,
          LCDVALUE_FLASH_BACKLIGHT,
-//         LCDVALUE_WATT_HOURS,
+         LCDVALUE_WATT_HOURS,
          LCDVALUE_dummy,
          LCDVALUE_MAX_VALUE = LCDVALUE_dummy - 1 //must equal the highest defined number (previous line)
     };
-//    #define LCDVALUE_MAX_VALUE       20 //must equal the highest defined number (previous line)
 
     #define LCD_UPDATE_ATTEMPTS_PER_LOOP 5
     #define LCD_VALUE_MINIMUM_DISPLAY_TIME_LOOPS 20
